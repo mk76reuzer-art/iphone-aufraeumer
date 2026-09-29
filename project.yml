@@ -1,0 +1,31 @@
+name: Aufraeumer
+options:
+  bundleIdPrefix: com.mk76reuzer
+  deploymentTarget:
+    iOS: "17.0"
+packages:
+  AufraeumerKern:
+    path: .
+targets:
+  Aufraeumer:
+    type: application
+    platform: iOS
+    sources: [App]
+    dependencies:
+      - package: AufraeumerKern
+        product: AufraeumerKern
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Aufräumer
+        NSPhotoLibraryUsageDescription: "Der Aufräumer zeigt dir große und überflüssige Fotos und Videos und löscht nur, was du ausdrücklich bestätigst."
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mk76reuzer.aufraeumer
+        SWIFT_VERSION: "5.9"
+        TARGETED_DEVICE_FAMILY: "1"
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
