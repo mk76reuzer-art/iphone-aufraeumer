@@ -32,12 +32,12 @@ public final class Loeschlauf: Sendable {
     private let wartezeit: TimeInterval
     private let pollIntervall: TimeInterval
     private let jetzt: @Sendable () -> Date
-    private let aufEintrag: (@Sendable (ProtokollEintrag) -> Void)?
+    private let aufEintrag: (@Sendable (ProtokollEintrag) async throws -> Void)?
 
     public init(bibliothek: any MedienBibliothek, sicherung: any Sicherung,
                 wartezeit: TimeInterval = 600, pollIntervall: TimeInterval = 2,
                 jetzt: @escaping @Sendable () -> Date = { Date() },
-                aufEintrag: (@Sendable (ProtokollEintrag) -> Void)? = nil) {
+                aufEintrag: (@Sendable (ProtokollEintrag) async throws -> Void)? = nil) {
         self.bibliothek = bibliothek
         self.sicherung = sicherung
         self.wartezeit = wartezeit
@@ -53,11 +53,11 @@ public final class Loeschlauf: Sendable {
         let jetzt = self.jetzt
         let aufEintrag = self.aufEintrag
 
-        func notiere(_ k: Kandidat, _ a: Aktion, _ grund: String? = nil) {
+        func notiere(_ k: Kandidat, _ a: Aktion, _ grund: String? = nil) async {
             let e = ProtokollEintrag(zeit: jetzt(), id: k.id, name: k.name,
                                      groesseBytes: k.groesseBytes, aktion: a, grund: grund)
             protokoll.hinzufuegen(e)
-            aufEintrag?(e)
+            try? await aufEintrag?(e)
         }
 
         // Dieselbe Datei nur einmal verarbeiten. Bei widersprüchlichen Angaben gilt die vorsichtigere:
@@ -81,7 +81,7 @@ public final class Loeschlauf: Sendable {
         guard bestaetigt else {
             for a in einzeln {
                 nicht[a.kandidat.id] = "Keine Bestätigung"
-                notiere(a.kandidat, .abgebrochen, "Keine Bestätigung")
+                await notiere(a.kandidat, .abgebrochen, "Keine Bestätigung")
             }
             return LoeschlaufErgebnis(geloescht: [], nichtGeloescht: nicht, protokoll: protokoll)
         }
@@ -108,14 +108,14 @@ public final class Loeschlauf: Sendable {
                     try ablauf.pruefen(originalBytes: export.bytes, originalPruefsumme: export.pruefsumme)
                     try await warteAufUpload(beleg)
                     try ablauf.hochgeladen()
-                    notiere(k, .gesichert)
+                    await notiere(k, .gesichert)
                 }
                 try ablauf.freigeben(favoritBestaetigt: a.favoritBestaetigt)
             } catch {
                 let grund = Loeschlauf.beschreibe(error)
                 try? ablauf.abbrechen(grund: grund)
                 nicht[k.id] = grund
-                notiere(k, .abgebrochen, grund)
+                await notiere(k, .abgebrochen, grund)
             }
             abl[k.id] = ablauf
         }
@@ -131,14 +131,14 @@ public final class Loeschlauf: Sendable {
             zuLoeschen.removeAll { $0 == g.behalten }
             let grund = "Letztes Exemplar einer Duplikatgruppe bleibt erhalten"
             nicht[g.behalten] = grund
-            notiere(behalten.kandidat, .abgebrochen, grund)
+            await notiere(behalten.kandidat, .abgebrochen, grund)
         }
 
         // Ein abgebrochener Vorgang löscht nichts mehr.
         if Task.isCancelled {
             for id in zuLoeschen {
                 nicht[id] = "Vorgang abgebrochen"
-                if let a = abl[id] { notiere(a.kandidat, .abgebrochen, "Vorgang abgebrochen") }
+                if let a = abl[id] { await notiere(a.kandidat, .abgebrochen, "Vorgang abgebrochen") }
             }
             return LoeschlaufErgebnis(geloescht: [], nichtGeloescht: nicht, protokoll: protokoll)
         }
@@ -148,19 +148,19 @@ public final class Loeschlauf: Sendable {
         }
 
         // Stufe 3: erst „beabsichtigt“ festhalten, dann löschen, dann Ergebnis festhalten.
-        for id in zuLoeschen { if let a = abl[id] { notiere(a.kandidat, .beabsichtigt) } }
+        for id in zuLoeschen { if let a = abl[id] { await notiere(a.kandidat, .beabsichtigt) } }
         do {
             try await bibliothek.loeschen(ids: zuLoeschen)
             for id in zuLoeschen {
                 _ = try? abl[id]?.geloescht()
-                if let a = abl[id] { notiere(a.kandidat, .geloescht) }
+                if let a = abl[id] { await notiere(a.kandidat, .geloescht) }
             }
             return LoeschlaufErgebnis(geloescht: zuLoeschen, nichtGeloescht: nicht, protokoll: protokoll)
         } catch {
             let grund = "Löschen nicht ausgeführt: \(Loeschlauf.beschreibe(error))"
             for id in zuLoeschen {
                 nicht[id] = grund
-                if let a = abl[id] { notiere(a.kandidat, .abgebrochen, grund) }
+                if let a = abl[id] { await notiere(a.kandidat, .abgebrochen, grund) }
             }
             return LoeschlaufErgebnis(geloescht: [], nichtGeloescht: nicht, protokoll: protokoll)
         }

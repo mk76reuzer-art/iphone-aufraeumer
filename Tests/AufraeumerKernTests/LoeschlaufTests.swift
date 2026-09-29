@@ -12,7 +12,7 @@ final class LoeschlaufTests: XCTestCase {
         sich = FakeSicherung()
     }
 
-    private func lauf(aufEintrag: (@Sendable (ProtokollEintrag) -> Void)? = nil) -> Loeschlauf {
+    private func lauf(aufEintrag: (@Sendable (ProtokollEintrag) async throws -> Void)? = nil) -> Loeschlauf {
         Loeschlauf(bibliothek: bib, sicherung: sich, wartezeit: 0.05, pollIntervall: 0.005,
                    jetzt: { T.jetzt }, aufEintrag: aufEintrag)
     }
@@ -208,6 +208,14 @@ final class LoeschlaufTests: XCTestCase {
         let e = await t.value
         XCTAssertTrue(e.geloescht.isEmpty)
         XCTAssertEqual(e.nichtGeloescht["A"], "Vorgang abgebrochen")
+        XCTAssertFalse(log.enthaeltPraefix("loeschen:"))
+    }
+
+    func testSchreibfehlerBeimBeabsichtigtVerhindertDasLoeschen() async {
+        let l = lauf(aufEintrag: { e in if e.aktion == .beabsichtigt { throw FakeFehler.ablegen } })
+        let e = await l.ausfuehren(auswahl: [nurLoeschen("A")], gruppen: [], bestaetigt: true)
+        XCTAssertTrue(e.geloescht.isEmpty)
+        XCTAssertEqual(e.nichtGeloescht["A"], "Protokoll konnte nicht geschrieben werden")
         XCTAssertFalse(log.enthaeltPraefix("loeschen:"))
     }
 }
