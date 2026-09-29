@@ -16,13 +16,14 @@ final class Ereignisse: @unchecked Sendable {
 final class FakeBibliothek: MedienBibliothek, @unchecked Sendable {
     let log: Ereignisse
     var exportFehlerFuer: Set<String> = []
+    var exportBytes: Int64 = 1000
     var loeschFehler: Error?
     init(log: Ereignisse) { self.log = log }
 
     func exportieren(id: String) async throws -> Export {
         if exportFehlerFuer.contains(id) { throw FakeFehler.export }
         log.add("export:\(id)")
-        return Export(datei: URL(fileURLWithPath: "/nicht-vorhanden/\(id)"), bytes: 1000, pruefsumme: "sum-\(id)")
+        return Export(datei: URL(fileURLWithPath: "/nicht-vorhanden/\(id)"), bytes: exportBytes, pruefsumme: "sum-\(id)")
     }
 
     func loeschen(ids: [String]) async throws {

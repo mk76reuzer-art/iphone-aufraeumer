@@ -142,4 +142,72 @@ final class LoeschlaufTests: XCTestCase {
         _ = await lauf().ausfuehren(auswahl: [sichern("A"), sichern("B")], gruppen: [], bestaetigt: true)
         XCTAssertFalse(log.enthaeltPraefix("loeschen:"))
     }
+
+    // MARK: Nachbesserungen nach der Endprüfung
+
+    func testVeralteteGruppeOhneNachbarnSchuetztTrotzdemDasBehalteneExemplar() async {
+        let gruppe = DuplikatGruppe(behalten: "A", loeschbar: ["B", "C"])
+        let e = await lauf().ausfuehren(auswahl: [nurLoeschen("A")], gruppen: [gruppe], bestaetigt: true)
+        XCTAssertTrue(e.geloescht.isEmpty)
+        XCTAssertEqual(e.nichtGeloescht["A"], "Letztes Exemplar einer Duplikatgruppe bleibt erhalten")
+        XCTAssertFalse(log.enthaeltPraefix("loeschen:"))
+    }
+
+    func testBehaltenesExemplarOhneEigeneSicherungBleibtAuchWennAnderesMitgliedGesichertIst() async {
+        let gruppe = DuplikatGruppe(behalten: "A", loeschbar: ["B"])
+        let e = await lauf().ausfuehren(auswahl: [nurLoeschen("A"), sichern("B")], gruppen: [gruppe], bestaetigt: true)
+        XCTAssertEqual(e.geloescht, ["B"])
+        XCTAssertEqual(e.nichtGeloescht["A"], "Letztes Exemplar einer Duplikatgruppe bleibt erhalten")
+    }
+
+    func testWiderspruechlicheDoppelteAuswahlNimmtDenSichererenModus() async {
+        let a1 = Auswahl(kandidat: T.k("A", video: true), modus: .nurLoeschen, favoritBestaetigt: false)
+        let a2 = Auswahl(kandidat: T.k("A", video: true), modus: .erstSichern, favoritBestaetigt: false)
+        let e = await lauf().ausfuehren(auswahl: [a1, a2], gruppen: [], bestaetigt: true)
+        XCTAssertEqual(e.geloescht, ["A"])
+        XCTAssertEqual(log.liste, ["export:A", "loeschen:A"])
+    }
+
+    func testWiderspruechlicheFavoritenBestaetigungGiltNurWennAlleBestaetigen() async {
+        let k = T.k("A", video: true, favorit: true)
+        let a1 = Auswahl(kandidat: k, modus: .erstSichern, favoritBestaetigt: true)
+        let a2 = Auswahl(kandidat: k, modus: .erstSichern, favoritBestaetigt: false)
+        let e = await lauf().ausfuehren(auswahl: [a1, a2], gruppen: [], bestaetigt: true)
+        XCTAssertTrue(e.geloescht.isEmpty)
+        XCTAssertEqual(e.nichtGeloescht["A"], "Favorit ohne ausdrückliche Bestätigung")
+    }
+
+    func testNichtLokaleOderGroessenloseDateienWerdenNieGeloescht() async {
+        let nurCloud = Auswahl(kandidat: T.k("A", screenshot: true, lokal: false), modus: .nurLoeschen, favoritBestaetigt: false)
+        let ohneGroesse = Auswahl(kandidat: T.k("B", groesse: 0, screenshot: true), modus: .nurLoeschen, favoritBestaetigt: false)
+        let e = await lauf().ausfuehren(auswahl: [nurCloud, ohneGroesse], gruppen: [], bestaetigt: true)
+        XCTAssertTrue(e.geloescht.isEmpty)
+        XCTAssertEqual(e.nichtGeloescht["A"], "Datei nicht lokal vorhanden oder Größe unbekannt")
+        XCTAssertEqual(e.nichtGeloescht["B"], "Datei nicht lokal vorhanden oder Größe unbekannt")
+        XCTAssertFalse(log.enthaeltPraefix("loeschen:"))
+    }
+
+    func testLeererOderAbweichenderExportVerhindertLoeschen() async {
+        bib.exportBytes = 0
+        var e = await lauf().ausfuehren(auswahl: [sichern("A")], gruppen: [], bestaetigt: true)
+        XCTAssertEqual(e.nichtGeloescht["A"], "Export ist leer")
+        bib.exportBytes = 999
+        e = await lauf().ausfuehren(auswahl: [sichern("B")], gruppen: [], bestaetigt: true)
+        XCTAssertEqual(e.nichtGeloescht["B"], "Größe des Exports weicht vom Original ab")
+        XCTAssertFalse(log.enthaeltPraefix("loeschen:"))
+    }
+
+    func testAbgebrochenerTaskLoeschtNichts() async {
+        let l = lauf()
+        let auswahl = [nurLoeschen("A")]
+        let t = Task { () -> LoeschlaufErgebnis in
+            while !Task.isCancelled { await Task.yield() }
+            return await l.ausfuehren(auswahl: auswahl, gruppen: [], bestaetigt: true)
+        }
+        t.cancel()
+        let e = await t.value
+        XCTAssertTrue(e.geloescht.isEmpty)
+        XCTAssertEqual(e.nichtGeloescht["A"], "Vorgang abgebrochen")
+        XCTAssertFalse(log.enthaeltPraefix("loeschen:"))
+    }
 }
