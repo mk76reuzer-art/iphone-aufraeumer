@@ -1,8 +1,5 @@
 import Foundation
 
-// ATTRAPPE FÜR DEN ROT-SCHRITT: absichtlich gefährlich falsch (löscht alles sofort, ohne
-// Bestätigung, ohne Sicherung, ohne Protokoll). Wird im nächsten Commit durch die echte Umsetzung ersetzt.
-
 public struct Auswahl: Sendable {
     public let kandidat: Kandidat
     public let modus: Modus
@@ -25,20 +22,140 @@ public enum LoeschlaufFehler: Error, Equatable {
     case uploadZeitueberschreitung
 }
 
+/// Steuert den ganzen Ablauf. Sicherheitsprinzip: Jede Unsicherheit führt zu „nicht löschen“.
 public final class Loeschlauf: Sendable {
     private let bibliothek: any MedienBibliothek
+    private let sicherung: any Sicherung
+    private let wartezeit: TimeInterval
+    private let pollIntervall: TimeInterval
+    private let jetzt: @Sendable () -> Date
+    private let aufEintrag: (@Sendable (ProtokollEintrag) -> Void)?
 
     public init(bibliothek: any MedienBibliothek, sicherung: any Sicherung,
                 wartezeit: TimeInterval = 600, pollIntervall: TimeInterval = 2,
                 jetzt: @escaping @Sendable () -> Date = { Date() },
                 aufEintrag: (@Sendable (ProtokollEintrag) -> Void)? = nil) {
         self.bibliothek = bibliothek
+        self.sicherung = sicherung
+        self.wartezeit = wartezeit
+        self.pollIntervall = pollIntervall
+        self.jetzt = jetzt
+        self.aufEintrag = aufEintrag
     }
 
     public func ausfuehren(auswahl: [Auswahl], gruppen: [DuplikatGruppe],
                            bestaetigt: Bool) async -> LoeschlaufErgebnis {
-        let ids = auswahl.map(\.kandidat.id)
-        try? await bibliothek.loeschen(ids: ids)
-        return LoeschlaufErgebnis(geloescht: ids, nichtGeloescht: [:], protokoll: Protokoll())
+        var protokoll = Protokoll()
+        var nicht: [String: String] = [:]
+        let jetzt = self.jetzt
+        let aufEintrag = self.aufEintrag
+
+        func notiere(_ k: Kandidat, _ a: Aktion, _ grund: String? = nil) {
+            let e = ProtokollEintrag(zeit: jetzt(), id: k.id, name: k.name,
+                                     groesseBytes: k.groesseBytes, aktion: a, grund: grund)
+            protokoll.hinzufuegen(e)
+            aufEintrag?(e)
+        }
+
+        // Dieselbe Datei nur einmal verarbeiten.
+        var gesehen = Set<String>()
+        let einzeln = auswahl.filter { gesehen.insert($0.kandidat.id).inserted }
+
+        guard bestaetigt else {
+            for a in einzeln {
+                nicht[a.kandidat.id] = "Keine Bestätigung"
+                notiere(a.kandidat, .abgebrochen, "Keine Bestätigung")
+            }
+            return LoeschlaufErgebnis(geloescht: [], nichtGeloescht: nicht, protokoll: protokoll)
+        }
+
+        // Stufe 1: je Datei sichern und prüfen (nur im Modus erstSichern), dann freigeben.
+        var abl: [String: DateiAblauf] = [:]
+        for a in einzeln {
+            let k = a.kandidat
+            var ablauf = DateiAblauf(kandidat: k, modus: a.modus)
+            do {
+                try ablauf.auswaehlen()
+                if a.modus == .erstSichern {
+                    let export = try await bibliothek.exportieren(id: k.id)
+                    defer { try? FileManager.default.removeItem(at: export.datei) }
+                    let beleg = try await sicherung.ablegen(export, name: k.name)
+                    let kopie = try await sicherung.kopieLesen(beleg)
+                    try ablauf.kopiert(bytes: kopie.bytes, pruefsumme: kopie.pruefsumme)
+                    try ablauf.pruefen(originalBytes: export.bytes, originalPruefsumme: export.pruefsumme)
+                    try await warteAufUpload(beleg)
+                    try ablauf.hochgeladen()
+                    notiere(k, .gesichert)
+                }
+                try ablauf.freigeben(favoritBestaetigt: a.favoritBestaetigt)
+            } catch {
+                let grund = Loeschlauf.beschreibe(error)
+                try? ablauf.abbrechen(grund: grund)
+                nicht[k.id] = grund
+                notiere(k, .abgebrochen, grund)
+            }
+            abl[k.id] = ablauf
+        }
+
+        // Stufe 2: Kandidaten für das Löschen bestimmen.
+        var zuLoeschen = einzeln.map(\.kandidat.id).filter { abl[$0]?.loeschenErlaubt == true }
+
+        // Nie das letzte Exemplar einer Duplikatgruppe löschen, wenn keine geprüfte Sicherung existiert.
+        let loeschSet = Set(zuLoeschen)
+        for g in gruppen where g.alleIds.allSatisfy({ loeschSet.contains($0) }) {
+            let hatSicherung = g.alleIds.contains { abl[$0]?.modus == .erstSichern }
+            if !hatSicherung, let behalten = abl[g.behalten] {
+                zuLoeschen.removeAll { $0 == g.behalten }
+                let grund = "Letztes Exemplar einer Duplikatgruppe bleibt erhalten"
+                nicht[g.behalten] = grund
+                notiere(behalten.kandidat, .abgebrochen, grund)
+            }
+        }
+
+        guard !zuLoeschen.isEmpty else {
+            return LoeschlaufErgebnis(geloescht: [], nichtGeloescht: nicht, protokoll: protokoll)
+        }
+
+        // Stufe 3: erst „beabsichtigt“ festhalten, dann löschen, dann Ergebnis festhalten.
+        for id in zuLoeschen { if let a = abl[id] { notiere(a.kandidat, .beabsichtigt) } }
+        do {
+            try await bibliothek.loeschen(ids: zuLoeschen)
+            for id in zuLoeschen {
+                _ = try? abl[id]?.geloescht()
+                if let a = abl[id] { notiere(a.kandidat, .geloescht) }
+            }
+            return LoeschlaufErgebnis(geloescht: zuLoeschen, nichtGeloescht: nicht, protokoll: protokoll)
+        } catch {
+            let grund = "Löschen nicht ausgeführt: \(Loeschlauf.beschreibe(error))"
+            for id in zuLoeschen {
+                nicht[id] = grund
+                if let a = abl[id] { notiere(a.kandidat, .abgebrochen, grund) }
+            }
+            return LoeschlaufErgebnis(geloescht: [], nichtGeloescht: nicht, protokoll: protokoll)
+        }
+    }
+
+    private func warteAufUpload(_ beleg: SicherungsBeleg) async throws {
+        let ende = Date().addingTimeInterval(wartezeit)
+        while true {
+            if try await sicherung.istHochgeladen(beleg) { return }
+            if Date() >= ende { throw LoeschlaufFehler.uploadZeitueberschreitung }
+            try await Task.sleep(nanoseconds: UInt64(pollIntervall * 1_000_000_000))
+        }
+    }
+
+    static func beschreibe(_ fehler: Error) -> String {
+        if let a = fehler as? AblaufFehler {
+            switch a {
+            case .groesseUngleich: return "Größe der Kopie stimmt nicht"
+            case .pruefsummeUngleich: return "Prüfsumme der Kopie stimmt nicht"
+            case .favoritOhneBestaetigung: return "Favorit ohne ausdrückliche Bestätigung"
+            case .unerlaubterUebergang(let von, let nach): return "Unerlaubter Übergang \(von) → \(nach)"
+            }
+        }
+        if let l = fehler as? LoeschlaufFehler, l == .uploadZeitueberschreitung {
+            return "Upload nicht rechtzeitig fertig"
+        }
+        return "Fehler: \(fehler.localizedDescription)"
     }
 }
