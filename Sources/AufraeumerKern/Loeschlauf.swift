@@ -60,6 +60,14 @@ public final class Loeschlauf: Sendable {
             try? await aufEintrag?(e)
         }
 
+        /// Wie `notiere`, aber ein Schreibfehler wird nicht verschluckt: Nur was sicher festgehalten ist, darf passieren.
+        func notiereStreng(_ k: Kandidat, _ a: Aktion) async throws {
+            let e = ProtokollEintrag(zeit: jetzt(), id: k.id, name: k.name,
+                                     groesseBytes: k.groesseBytes, aktion: a, grund: nil)
+            protokoll.hinzufuegen(e)
+            try await aufEintrag?(e)
+        }
+
         // Dieselbe Datei nur einmal verarbeiten. Bei widersprüchlichen Angaben gilt die vorsichtigere:
         // gesichert wird, sobald ein Eintrag es verlangt; ein Favorit gilt nur als bestätigt, wenn alle bestätigen.
         var reihenfolge: [String] = []
@@ -148,7 +156,16 @@ public final class Loeschlauf: Sendable {
         }
 
         // Stufe 3: erst „beabsichtigt“ festhalten, dann löschen, dann Ergebnis festhalten.
-        for id in zuLoeschen { if let a = abl[id] { await notiere(a.kandidat, .beabsichtigt) } }
+        do {
+            for id in zuLoeschen { if let a = abl[id] { try await notiereStreng(a.kandidat, .beabsichtigt) } }
+        } catch {
+            let grund = "Protokoll konnte nicht geschrieben werden"
+            for id in zuLoeschen {
+                nicht[id] = grund
+                if let a = abl[id] { await notiere(a.kandidat, .abgebrochen, grund) }
+            }
+            return LoeschlaufErgebnis(geloescht: [], nichtGeloescht: nicht, protokoll: protokoll)
+        }
         do {
             try await bibliothek.loeschen(ids: zuLoeschen)
             for id in zuLoeschen {
