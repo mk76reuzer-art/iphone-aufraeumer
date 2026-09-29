@@ -20,6 +20,9 @@ public struct LoeschlaufErgebnis: Sendable {
 
 public enum LoeschlaufFehler: Error, Equatable {
     case uploadZeitueberschreitung
+    case nichtLokalOderGroesseUnbekannt
+    case exportLeer
+    case exportGroesseAbweichend
 }
 
 /// Steuert den ganzen Ablauf. Sicherheitsprinzip: Jede Unsicherheit führt zu „nicht löschen“.
@@ -57,9 +60,23 @@ public final class Loeschlauf: Sendable {
             aufEintrag?(e)
         }
 
-        // Dieselbe Datei nur einmal verarbeiten.
-        var gesehen = Set<String>()
-        let einzeln = auswahl.filter { gesehen.insert($0.kandidat.id).inserted }
+        // Dieselbe Datei nur einmal verarbeiten. Bei widersprüchlichen Angaben gilt die vorsichtigere:
+        // gesichert wird, sobald ein Eintrag es verlangt; ein Favorit gilt nur als bestätigt, wenn alle bestätigen.
+        var reihenfolge: [String] = []
+        var zusammen: [String: Auswahl] = [:]
+        for a in auswahl {
+            let id = a.kandidat.id
+            if let vorhanden = zusammen[id] {
+                zusammen[id] = Auswahl(
+                    kandidat: vorhanden.kandidat,
+                    modus: (vorhanden.modus == .erstSichern || a.modus == .erstSichern) ? .erstSichern : .nurLoeschen,
+                    favoritBestaetigt: vorhanden.favoritBestaetigt && a.favoritBestaetigt)
+            } else {
+                zusammen[id] = a
+                reihenfolge.append(id)
+            }
+        }
+        let einzeln = reihenfolge.compactMap { zusammen[$0] }
 
         guard bestaetigt else {
             for a in einzeln {
@@ -75,10 +92,16 @@ public final class Loeschlauf: Sendable {
             let k = a.kandidat
             var ablauf = DateiAblauf(kandidat: k, modus: a.modus)
             do {
+                if Task.isCancelled { throw CancellationError() }
+                guard k.istLokalVorhanden, k.groesseBytes > 0 else {
+                    throw LoeschlaufFehler.nichtLokalOderGroesseUnbekannt
+                }
                 try ablauf.auswaehlen()
                 if a.modus == .erstSichern {
                     let export = try await bibliothek.exportieren(id: k.id)
                     defer { try? FileManager.default.removeItem(at: export.datei) }
+                    guard export.bytes > 0 else { throw LoeschlaufFehler.exportLeer }
+                    guard export.bytes == k.groesseBytes else { throw LoeschlaufFehler.exportGroesseAbweichend }
                     let beleg = try await sicherung.ablegen(export, name: k.name)
                     let kopie = try await sicherung.kopieLesen(beleg)
                     try ablauf.kopiert(bytes: kopie.bytes, pruefsumme: kopie.pruefsumme)
@@ -100,16 +123,24 @@ public final class Loeschlauf: Sendable {
         // Stufe 2: Kandidaten für das Löschen bestimmen.
         var zuLoeschen = einzeln.map(\.kandidat.id).filter { abl[$0]?.loeschenErlaubt == true }
 
-        // Nie das letzte Exemplar einer Duplikatgruppe löschen, wenn keine geprüfte Sicherung existiert.
-        let loeschSet = Set(zuLoeschen)
-        for g in gruppen where g.alleIds.allSatisfy({ loeschSet.contains($0) }) {
-            let hatSicherung = g.alleIds.contains { abl[$0]?.modus == .erstSichern }
-            if !hatSicherung, let behalten = abl[g.behalten] {
-                zuLoeschen.removeAll { $0 == g.behalten }
-                let grund = "Letztes Exemplar einer Duplikatgruppe bleibt erhalten"
-                nicht[g.behalten] = grund
-                notiere(behalten.kandidat, .abgebrochen, grund)
+        // Das zu behaltende Exemplar einer Duplikatgruppe wird nur gelöscht, wenn es selbst eine geprüfte
+        // Sicherung hat. Das gilt unabhängig davon, was sonst ausgewählt ist (auch bei veralteten Gruppen).
+        for g in gruppen where zuLoeschen.contains(g.behalten) {
+            if abl[g.behalten]?.modus == .erstSichern { continue }
+            guard let behalten = abl[g.behalten] else { continue }
+            zuLoeschen.removeAll { $0 == g.behalten }
+            let grund = "Letztes Exemplar einer Duplikatgruppe bleibt erhalten"
+            nicht[g.behalten] = grund
+            notiere(behalten.kandidat, .abgebrochen, grund)
+        }
+
+        // Ein abgebrochener Vorgang löscht nichts mehr.
+        if Task.isCancelled {
+            for id in zuLoeschen {
+                nicht[id] = "Vorgang abgebrochen"
+                if let a = abl[id] { notiere(a.kandidat, .abgebrochen, "Vorgang abgebrochen") }
             }
+            return LoeschlaufErgebnis(geloescht: [], nichtGeloescht: nicht, protokoll: protokoll)
         }
 
         guard !zuLoeschen.isEmpty else {
@@ -145,6 +176,7 @@ public final class Loeschlauf: Sendable {
     }
 
     static func beschreibe(_ fehler: Error) -> String {
+        if fehler is CancellationError { return "Vorgang abgebrochen" }
         if let a = fehler as? AblaufFehler {
             switch a {
             case .groesseUngleich: return "Größe der Kopie stimmt nicht"
@@ -153,8 +185,13 @@ public final class Loeschlauf: Sendable {
             case .unerlaubterUebergang(let von, let nach): return "Unerlaubter Übergang \(von) → \(nach)"
             }
         }
-        if let l = fehler as? LoeschlaufFehler, l == .uploadZeitueberschreitung {
-            return "Upload nicht rechtzeitig fertig"
+        if let l = fehler as? LoeschlaufFehler {
+            switch l {
+            case .uploadZeitueberschreitung: return "Upload nicht rechtzeitig fertig"
+            case .nichtLokalOderGroesseUnbekannt: return "Datei nicht lokal vorhanden oder Größe unbekannt"
+            case .exportLeer: return "Export ist leer"
+            case .exportGroesseAbweichend: return "Größe des Exports weicht vom Original ab"
+            }
         }
         return "Fehler: \(fehler.localizedDescription)"
     }

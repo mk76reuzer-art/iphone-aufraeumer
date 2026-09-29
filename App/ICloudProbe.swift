@@ -18,7 +18,7 @@ enum ICloudProbe {
         }
         let daten = Data(bytes)
         let summe = SHA256.hash(data: daten).map { String(format: "%02x", $0) }.joined()
-        let ziel = ordner.appendingPathComponent("aufraeumer-probe-\(Int(Date().timeIntervalSince1970)).bin")
+        var ziel = ordner.appendingPathComponent("aufraeumer-probe-\(Int(Date().timeIntervalSince1970)).bin")
 
         var koordinatorFehler: NSError?
         var schreibFehler: Error?
@@ -36,6 +36,8 @@ enum ICloudProbe {
         var hochgeladen = false
         var letzte = ""
         while Date().timeIntervalSince(start) < 180 {
+            // Zwischengespeicherte Werte verwerfen, sonst kann ein veralteter Upload-Status zurückkommen.
+            ziel.removeAllCachedResourceValues()
             let w = try? ziel.resourceValues(forKeys: [.isUbiquitousItemKey, .ubiquitousItemIsUploadedKey,
                                                        .ubiquitousItemIsUploadingKey, .ubiquitousItemUploadingErrorKey])
             let zeile = "ubiquitär=\(String(describing: w?.isUbiquitousItem)) "
