@@ -179,16 +179,16 @@ struct UebersichtView: View {
     private var videoBlock: some View {
         let spare = model.geschaetzteVideoErsparnis()
         if spare > 0 {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Videos verkleinern").font(.title3.bold())
-                Text("Große Videos werden kleiner gespeichert. Geschätzt \(Formatierung.gigabytes(spare)) weniger. Das Original löscht das iPhone erst nach deiner Bestätigung.")
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Videos verkleinern, etwa \(Formatierung.gigabytes(spare)) weniger")
+                    .font(.headline)
+                Text("Das Original bleibt, bis du die Frage bestätigst.")
                     .font(.body)
                 Button("Videos verkleinern") { model.zeigeVideoVerkleinern = true }
                     .buttonStyle(.bordered)
-                    .controlSize(.large)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding()
+            .padding(12)
             .background(Color.green.opacity(0.12))
             .cornerRadius(12)
         }
