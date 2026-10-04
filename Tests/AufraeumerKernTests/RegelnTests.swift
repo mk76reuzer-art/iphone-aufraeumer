@@ -16,15 +16,37 @@ final class RegelnTests: XCTestCase {
         XCTAssertTrue(kat(T.k("A", groesse: 900_000_000, video: false)).isEmpty)
     }
 
-    func testUnbekannteGroesseOderNurCloudWirdNieAngeboten() {
+    func testUnbekannteGroesseWirdNichtAlsVideoAngeboten() {
         XCTAssertTrue(kat(T.k("A", groesse: 0, aufnahme: T.jahreher(5), video: true)).isEmpty)
-        XCTAssertTrue(kat(T.k("B", groesse: 900_000_000, aufnahme: T.jahreher(5), video: true, lokal: false)).isEmpty)
     }
 
-    func testScreenshotErstNachNeunzigTagen() {
+    func testNurCloudBleibtSichtbarAberOhneFreiplatz() {
+        let k = T.k("B", groesse: 900_000_000, aufnahme: T.jahreher(5), video: true, lokal: false, nurCloud: true)
+        XCTAssertEqual(kat(k), [.grosseVideos])
+        XCTAssertFalse(Regeln.bringtPlatz(k))
+        XCTAssertTrue(Regeln.bringtPlatz(T.k("C", groesse: 900_000_000, video: true)))
+    }
+
+    func testScreenshotWirdImmerGezaehlt() {
         XCTAssertEqual(kat(T.k("A", aufnahme: T.tageher(91), screenshot: true)), [.alteScreenshots])
-        XCTAssertTrue(kat(T.k("B", aufnahme: T.tageher(90), screenshot: true)).isEmpty)
-        XCTAssertTrue(kat(T.k("C", aufnahme: T.tageher(89), screenshot: true)).isEmpty)
+        XCTAssertEqual(kat(T.k("B", aufnahme: T.tageher(1), screenshot: true)), [.alteScreenshots])
+        XCTAssertEqual(kat(T.k("C", groesse: 0, screenshot: true, lokal: false)), [.alteScreenshots])
+        XCTAssertEqual(kat(T.k("D", name: "Bildschirmfoto 2024.png")), [.alteScreenshots])
+    }
+
+    func testLangeVideosLiveRawAufnahmeUndWhatsApp() {
+        XCTAssertEqual(kat(T.k("L", groesse: 2_000_000, video: true, dauer: 180)), [.langeVideos])
+        XCTAssertTrue(kat(T.k("K", groesse: 2_000_000, video: true, dauer: 179)).isEmpty)
+        XCTAssertEqual(kat(T.k("Live", live: true)), [.liveFotos])
+        XCTAssertEqual(kat(T.k("Raw", raw: true)), [.rawFotos])
+        XCTAssertEqual(kat(T.k("DNG", name: "Urlaub.DNG")), [.rawFotos])
+        XCTAssertEqual(kat(T.k("Film", groesse: 8_000_000, video: true, bildschirmfilm: true)), [.bildschirmaufnahmen])
+        XCTAssertEqual(
+            kat(T.k("WA", groesse: 8_000_000, video: true, name: "VID-20240101-WA0001.mp4")),
+            [.whatsAppVideos]
+        )
+        let gross = kat(T.k("Beide", groesse: 80_000_000, video: true, name: "WhatsApp Video.mp4"))
+        XCTAssertEqual(gross, [.grosseVideos, .whatsAppVideos])
     }
 
     func testLangeUnberuehrtBrauchtAlleBedingungen() {
@@ -56,6 +78,10 @@ final class RegelnTests: XCTestCase {
         XCTAssertTrue(Kategorie.langeUnberuehrt.sichernNoetig)
         XCTAssertFalse(Kategorie.duplikate.sichernNoetig)
         XCTAssertFalse(Kategorie.serienbilder.sichernNoetig)
+        XCTAssertFalse(Kategorie.alteScreenshots.sichernNoetig)
+        XCTAssertTrue(Kategorie.langeVideos.sichernNoetig)
+        XCTAssertTrue(Kategorie.whatsAppVideos.sichernNoetig)
+        XCTAssertTrue(Kategorie.liveFotos.sichernNoetig)
         XCTAssertFalse(Kategorie.alteScreenshots.sichernNoetig)
     }
 }

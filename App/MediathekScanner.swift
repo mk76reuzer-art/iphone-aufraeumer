@@ -9,6 +9,10 @@ struct ScanErgebnis: Sendable {
     var serienGruppen: [DuplikatGruppe]
     var bytesJeKategorie: [Kategorie: Int64]
     var hinweis: String? = nil
+    var anzahlAssets: Int = 0
+    var mediathekLokalBytes: Int64 = 0
+    var videoLokalBytes: Int64 = 0
+    var anzahlNurCloud: Int = 0
 }
 
 enum MediathekScanner {
@@ -37,6 +41,9 @@ enum MediathekScanner {
         var serienEintraege: [(Kandidat, String)] = []
         var index = 0
         var abgebrochen = false
+        var mediathekLokal: Int64 = 0
+        var videoLokal: Int64 = 0
+        var nurCloud = 0
 
         alle.enumerateObjects { asset, _, stop in
             if Task.isCancelled {
@@ -50,20 +57,35 @@ enum MediathekScanner {
             }
             bibliothek.registriere(asset)
             let meta = PhotoKitHilfen.groesseUndLokal(asset: asset)
-            guard let aufnahme = asset.creationDate else { return }
+            let giltAlsLokal = meta.lokal ?? true
+            let nurInCloud = meta.lokal == false
+            if nurInCloud { nurCloud += 1 }
+            if giltAlsLokal && meta.groesse > 0 {
+                mediathekLokal += meta.groesse
+                if asset.mediaType == .video { videoLokal += meta.groesse }
+            }
+            let aufnahme = asset.creationDate ?? Date()
+            let nameIstScreenshot = Regeln.istBildschirmfotoName(meta.name)
             let k = Kandidat(
                 id: asset.localIdentifier,
                 name: meta.name,
-                groesseBytes: meta.lokal ? meta.groesse : 0,
+                groesseBytes: meta.groesse,
                 aufnahme: aufnahme,
                 dauerSekunden: asset.mediaType == .video ? asset.duration : nil,
                 istVideo: asset.mediaType == .video,
-                istScreenshot: asset.mediaSubtypes.contains(.photoScreenshot),
+                istScreenshot: asset.mediaSubtypes.contains(.photoScreenshot) || nameIstScreenshot,
                 istFavorit: asset.isFavorite,
                 istBearbeitet: asset.hasAdjustments,
                 inAlbum: PhotoKitHilfen.inBenutzerAlbum(asset: asset),
                 istAusgeblendet: asset.isHidden,
-                istLokalVorhanden: meta.lokal && meta.groesse > 0
+                istLokalVorhanden: giltAlsLokal && meta.groesse > 0 && !nurInCloud,
+                istLiveFoto: asset.mediaSubtypes.contains(.photoLive),
+                istRaw: asset.mediaSubtypes.contains(.photoRAW),
+                istBildschirmaufnahme: asset.mediaType == .video && (
+                    asset.mediaSubtypes.contains(.videoScreenRecording)
+                    || Regeln.istBildschirmaufnahmeName(meta.name)
+                ),
+                nurInCloud: nurInCloud
             )
             liste.append(k)
             if let sk = PhotoKitHilfen.serienKennung(asset: asset) {
@@ -111,7 +133,9 @@ enum MediathekScanner {
             ? "Einige mögliche Doppelte konnten nicht verglichen werden, weil zu wenig Speicher frei ist. Angezeigt wird nur, was sicher geprüft wurde."
             : nil
         return ScanErgebnis(kandidaten: liste, kategorien: katMap, duplikatGruppen: duplikate,
-                            serienGruppen: serien, bytesJeKategorie: bytes, hinweis: hinweis)
+                            serienGruppen: serien, bytesJeKategorie: bytes, hinweis: hinweis,
+                            anzahlAssets: gesamt, mediathekLokalBytes: mediathekLokal,
+                            videoLokalBytes: videoLokal, anzahlNurCloud: nurCloud)
     }
 
     private struct DuplikatStand {

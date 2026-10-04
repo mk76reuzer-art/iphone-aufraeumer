@@ -7,10 +7,9 @@ struct ZuletztGeloeschtAnleitung: View {
                 .font(.title3.bold())
             Text("Gelöschtes bleibt 30 Tage liegen. Erst danach ist der Platz frei.")
                 .font(.body)
-            schritt(nr: 1, symbol: "photo.on.rectangle.angled", text: "Öffne die Fotos-App.")
-            schritt(nr: 2, symbol: "rectangle.stack", text: "Tippe unten auf Alben.")
-            schritt(nr: 3, symbol: "trash", text: "Öffne Zuletzt gelöscht.")
-            schritt(nr: 4, symbol: "trash.slash", text: "Tippe Alle löschen und bestätige.")
+            schritt(nr: 1, symbol: "photo.on.rectangle.angled", text: "Tippe unten auf Fotos-App öffnen.")
+            schritt(nr: 2, symbol: "trash", text: "Tippe unten auf Alben und dann auf Zuletzt gelöscht.")
+            schritt(nr: 3, symbol: "trash.slash", text: "Tippe Alle löschen und bestätige.")
         }
         .padding()
         .background(Color.orange.opacity(0.14))

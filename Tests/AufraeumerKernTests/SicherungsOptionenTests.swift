@@ -14,6 +14,14 @@ final class SicherungsOptionenTests: XCTestCase {
         XCTAssertEqual(modus, .erstSichern)
     }
 
+    func testSicherungFuerGrosseDateienIstAbwaehlbar() {
+        let aus = SicherungsOptionen(grosseSichern: false)
+        XCTAssertEqual(aus.effektiverModus(kategorien: [.grosseVideos]), .nurLoeschen)
+        XCTAssertEqual(aus.effektiverModus(kategorien: [.langeVideos]), .nurLoeschen)
+        XCTAssertEqual(aus.effektiverModus(kategorien: [.whatsAppVideos]), .nurLoeschen)
+        XCTAssertEqual(aus.effektiverModus(kategorien: [.duplikate]), .nurLoeschen)
+    }
+
     func testDuplikatMitOptionBrauchtOrdner() {
         let opt = SicherungsOptionen(duplikateSichern: true)
         let modus = opt.effektiverModus(kategorien: [.duplikate])

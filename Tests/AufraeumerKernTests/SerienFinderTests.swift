@@ -28,6 +28,15 @@ final class SerienFinderTests: XCTestCase {
         XCTAssertTrue(SerienFinder.gruppen(aus: eintraege).isEmpty)
     }
 
+    func testNurCloudWirdTrotzdemGezaehlt() {
+        let eintraege = [
+            (T.k("A", groesse: 100, lokal: false), "s"),
+            (T.k("B", groesse: 100, lokal: false), "s"),
+            (T.k("C", groesse: 100, lokal: false), "s"),
+        ]
+        XCTAssertEqual(SerienFinder.gruppen(aus: eintraege).count, 1)
+    }
+
     func testFavoritWirdBehalten() {
         let eintraege = [
             (T.k("A", groesse: 100, aufnahme: T.tageher(10)), "s"),

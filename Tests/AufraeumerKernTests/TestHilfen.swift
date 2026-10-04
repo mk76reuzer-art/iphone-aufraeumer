@@ -17,10 +17,14 @@ enum T {
     static func k(_ id: String = "A", groesse: Int64 = 1_000, aufnahme: Date? = nil,
                   video: Bool = false, screenshot: Bool = false, favorit: Bool = false,
                   bearbeitet: Bool = false, album: Bool = false, ausgeblendet: Bool = false,
-                  lokal: Bool = true, dauer: Double? = nil, name: String? = nil) -> Kandidat {
+                  lokal: Bool = true, dauer: Double? = nil, name: String? = nil,
+                  live: Bool = false, raw: Bool = false, bildschirmfilm: Bool = false,
+                  nurCloud: Bool = false) -> Kandidat {
         Kandidat(id: id, name: name ?? "IMG_\(id).MP4", groesseBytes: groesse,
                  aufnahme: aufnahme ?? tageher(1), dauerSekunden: dauer, istVideo: video,
                  istScreenshot: screenshot, istFavorit: favorit, istBearbeitet: bearbeitet,
-                 inAlbum: album, istAusgeblendet: ausgeblendet, istLokalVorhanden: lokal)
+                 inAlbum: album, istAusgeblendet: ausgeblendet, istLokalVorhanden: lokal,
+                 istLiveFoto: live, istRaw: raw, istBildschirmaufnahme: bildschirmfilm,
+                 nurInCloud: nurCloud)
     }
 }

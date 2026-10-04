@@ -43,7 +43,11 @@ struct StartView: View {
             }
             .task { await model.beimStart() }
             .onChange(of: scenePhase) { neu in
-                if neu == .active && model.fehlerIstZugriff && model.phase == .uebersicht {
+                guard neu == .active else { return }
+                if model.phase == .bericht {
+                    model.erneutMessen()
+                }
+                if model.fehlerIstZugriff && model.phase == .uebersicht {
                     Task { await model.scanStarten() }
                 }
             }
@@ -131,18 +135,42 @@ struct UebersichtView: View {
                     if let hinweis = model.scan?.hinweis {
                         HinweisKasten(text: hinweis, warnung: false)
                     }
+                    if let scan = model.scan, scan.anzahlNurCloud > 0 {
+                        HinweisKasten(text: "\(scan.anzahlNurCloud) Dateien liegen nur in iCloud. Sie stehen in der Liste mit einem Hinweis. Löschen macht auf dem iPhone fast nichts frei und löscht sie auch in der Cloud.", warnung: false)
+                    }
                     videoBlock
-                    if model.scan != nil && !model.fehlerIstZugriff {
-                        Text("Das kann weg").font(.title2.bold())
-                        ForEach(model.zeilen()) { zeile in
-                            kategorieZeile(zeile.kat, anzahl: zeile.anzahl, bytes: zeile.bytes)
+                    if model.scan != nil && !model.fehlerIstZugriff && !model.pruefungLeerTrotzMedien {
+                        Text("Größte Dateien").font(.title2.bold())
+                        Text("Antippen wählt aus. Die größten stehen oben.")
+                            .font(.body)
+                        ForEach(model.groessteBrocken()) { k in
+                            brockenZeile(k)
                         }
+                        if !model.gruppenZeilen().isEmpty {
+                            Text("Gruppen").font(.title3.bold())
+                            ForEach(model.gruppenZeilen()) { zeile in
+                                Text("\(zeile.kat.anzeigeName): \(zeile.anzahl) Dateien, \(Formatierung.gigabytes(zeile.bytes))")
+                                    .font(.body)
+                            }
+                        }
+                    }
+                    if model.berichtKopiert {
+                        Text("Bericht ist kopiert. Du kannst ihn jetzt schicken.")
+                            .font(.body)
                     }
                 }
                 .padding()
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                hauptknopf.background(Color(.systemBackground))
+                VStack(spacing: 0) {
+                    hauptknopf
+                    if !model.fehlerIstZugriff && !model.pruefungLeerTrotzMedien {
+                        Button("Speicher-Bericht kopieren") { model.berichtKopieren() }
+                            .font(.body)
+                            .padding(.bottom, 8)
+                    }
+                }
+                .background(Color(.systemBackground))
             }
         }
         .bildschirm("bildschirm-uebersicht")
@@ -150,22 +178,30 @@ struct UebersichtView: View {
 
     private var speicherKarte: some View {
         VStack(alignment: .leading, spacing: 6) {
-            let summe = model.freimachbareBytes()
             if model.fehlerIstZugriff {
                 Text("Fotos sind gesperrt")
                     .font(.system(size: 34, weight: .bold, design: .rounded))
                 Text("Tippe unten auf Einstellungen öffnen und wähle Alle Fotos.")
                     .font(.title3)
-            } else {
-                Text(summe > 0 ? "Etwa \(Formatierung.gigabytes(summe))" : "Nichts zum Freimachen")
+                if let s = model.speicher {
+                    Text("\(Formatierung.gigabytes(s.freiBytes)) von \(Formatierung.gigabytes(s.gesamtBytes)) sind frei.")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                }
+            } else if let s = model.speicher {
+                Text("\(Formatierung.gigabytes(s.freiBytes)) frei")
                     .font(.system(size: 34, weight: .bold, design: .rounded))
-                Text(summe > 0 ? "kannst du freimachen." : "Tippe auf Tipps, dort stehen weitere Wege.")
-                    .font(.title3)
-            }
-            if let s = model.speicher {
-                Text("\(Formatierung.gigabytes(s.freiBytes)) von \(Formatierung.gigabytes(s.gesamtBytes)) sind frei.")
+                Text("Belegt sind \(Formatierung.gigabytes(s.belegtBytes)) von \(Formatierung.gigabytes(s.gesamtBytes)).")
                     .font(.body)
-                    .foregroundStyle(.secondary)
+                if let scan = model.scan {
+                    Text("Fotos und Videos auf dem iPhone: \(Formatierung.gigabytes(scan.mediathekLokalBytes)), davon Videos \(Formatierung.gigabytes(scan.videoLokalBytes)).")
+                        .font(.body)
+                }
+                Text(model.bilanzSatz())
+                    .font(.body)
+            } else {
+                Text(model.bilanzSatz())
+                    .font(.title3)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -194,19 +230,44 @@ struct UebersichtView: View {
         }
     }
 
-    private func kategorieZeile(_ kat: Kategorie, anzahl: Int, bytes: Int64) -> some View {
-        HStack {
+    private func brockenZeile(_ k: Kandidat) -> some View {
+        HStack(spacing: 12) {
+            FotoVorschau(assetId: k.id)
+                .frame(width: 56, height: 56)
+                .cornerRadius(8)
             VStack(alignment: .leading, spacing: 2) {
-                Text(kat.anzeigeName).font(.headline)
-                Text(anzahl == 0 ? "Nichts gefunden" : "\(anzahl) Dateien")
+                Text(k.name).font(.headline).lineLimit(1)
+                Text(groesseText(k))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                if k.nurInCloud {
+                    Text("Nur in iCloud. Löschen macht hier fast nichts frei und löscht auch in der Cloud.")
+                        .font(.subheadline)
+                }
             }
             Spacer()
-            Text(bytes > 0 ? Formatierung.gigabytes(bytes) : "nichts")
-                .font(.title3.bold())
+            if !k.nurInCloud && Regeln.bringtPlatz(k) {
+                Image(systemName: model.ausgewaehlt.contains(k.id) ? "checkmark.circle.fill" : "circle")
+                    .font(.title2)
+                    .foregroundStyle(Color.accentColor)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard !k.nurInCloud, Regeln.bringtPlatz(k) else { return }
+            if model.ausgewaehlt.contains(k.id) {
+                model.ausgewaehlt.remove(k.id)
+            } else {
+                model.ausgewaehlt.insert(k.id)
+            }
         }
         .padding(.vertical, 4)
+    }
+
+    private func groesseText(_ k: Kandidat) -> String {
+        var teile = [Formatierung.gigabytes(k.groesseBytes)]
+        if k.istFavorit { teile.append("Favorit") }
+        return teile.joined(separator: ", ")
     }
 
     @ViewBuilder
@@ -215,10 +276,17 @@ struct UebersichtView: View {
             HauptButton(titel: "Einstellungen öffnen") { EinstellungenOeffner.appEinstellungen() }
         } else if model.scan == nil {
             HauptButton(titel: "Erneut versuchen") { Task { await model.scanStarten() } }
-        } else if model.freimachbareBytes() == 0 {
+        } else if model.pruefungLeerTrotzMedien {
+            HauptButton(titel: "Speicher-Bericht kopieren") { model.berichtKopieren() }
+        } else if model.bytesAusgewaehlt() > 0 {
+            HauptButton(titel: "\(Formatierung.gigabytes(model.bytesAusgewaehlt())) freimachen") {
+                model.weiterVonAuswahl()
+            }
+            .accessibilityIdentifier("knopf-freimachen")
+        } else if model.groessteBrocken().isEmpty {
             HauptButton(titel: "Tipps ansehen") { model.tippsAnzeigen = true }
         } else {
-            HauptButton(titel: "Auswählen") { model.weiterVonUebersicht() }
+            HauptButton(titel: "Dateien antippen", aktiv: false) {}
         }
     }
 }
@@ -231,8 +299,9 @@ struct AuswahlView: View {
             SchrittLeiste(aktuell: .auswaehlen, nutzenSatz: model.nutzenSatz(fuer: .auswaehlen))
             List {
                 Section {
-                    Text("Doppelte, Serien und Bildschirmfotos werden ohne Kopie gelöscht. Du kannst die Kopie einschalten.")
+                    Text("Doppelte, Serien und Bildschirmfotos werden ohne Kopie gelöscht. Große Dateien sichert die App nur, wenn du es eingeschaltet lässt.")
                         .font(.body)
+                    Toggle("Große Dateien vorher sichern", isOn: sicherungBinding(\.grosseSichern))
                     Toggle("Doppelte auch sichern", isOn: sicherungBinding(\.duplikateSichern))
                     Toggle("Serienbilder auch sichern", isOn: sicherungBinding(\.serienSichern))
                     Toggle("Bildschirmfotos auch sichern", isOn: sicherungBinding(\.screenshotsSichern))
@@ -305,17 +374,24 @@ struct SichernView: View {
                 Text(model.sicherOrdnerName ?? "")
                     .font(.title3)
                     .padding(.horizontal)
-                Text("Die Kopien liegen im Ordner Aufräumer-Sicherung. Erst wenn die Größe stimmt, darf gelöscht werden.")
+                Text("Die Kopien liegen im Ordner Aufräumer-Sicherung. Die Sicherung ist empfohlen, aber keine Pflicht.")
                     .font(.body)
                     .padding(.horizontal)
                 Spacer()
                 Button("Anderen Ordner wählen") { model.ordnerWaehlen = true }
                     .font(.body)
                     .frame(maxWidth: .infinity)
+                Button("Ohne Sicherung fortfahren") { model.ohneSicherungWeiter() }
+                    .font(.title3.bold())
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, 8)
                 HauptButton(titel: "Weiter zum Löschen") { model.weiterVonSichern() }
             } else {
-                Text("Ordner wählen")
+                Text("Sicherung ist freiwillig")
                     .font(.title.bold())
+                    .padding(.horizontal)
+                Text("Empfohlen, aber keine Pflicht. Ohne Ordner gibt es keine Kopie. Gelöschtes liegt dann 30 Tage unter Zuletzt gelöscht.")
+                    .font(.body)
                     .padding(.horizontal)
                 VStack(alignment: .leading, spacing: 8) {
                     Text("1. Tippe auf Ordner wählen.")
@@ -325,11 +401,11 @@ struct SichernView: View {
                 }
                 .font(.title3)
                 .padding(.horizontal)
-                Text("Die App merkt sich den Ordner. Die Kopien legt sie in Aufräumer-Sicherung.")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal)
                 Spacer()
+                Button("Ohne Sicherung fortfahren") { model.ohneSicherungWeiter() }
+                    .font(.title3.bold())
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, 8)
                 HauptButton(titel: "Ordner wählen") { model.ordnerWaehlen = true }
             }
         }
@@ -355,6 +431,11 @@ struct BestaetigenView: View {
                     .font(.body)
                     .padding(.horizontal)
             }
+            if model.verzichtetAufEmpfohleneSicherung {
+                Text("Ohne Sicherung. Es gibt keine Kopie. Gelöschtes bleibt 30 Tage unter Zuletzt gelöscht, danach ist es weg.")
+                    .font(.title3)
+                    .padding(.horizontal)
+            }
             Text("Das iPhone fragt danach noch einmal. Wenn du ablehnst, bleibt alles.")
                 .font(.body)
                 .padding(.horizontal)
@@ -374,7 +455,10 @@ struct BestaetigenView: View {
             }
             .font(.body)
             .frame(maxWidth: .infinity)
-            HauptButton(titel: "Jetzt löschen", aktiv: model.loeschenBereit) {
+            HauptButton(
+                titel: model.verzichtetAufEmpfohleneSicherung ? "Ohne Sicherung löschen" : "Jetzt löschen",
+                aktiv: model.loeschenBereit
+            ) {
                 model.loeschenBestaetigt()
             }
         }
@@ -398,9 +482,16 @@ struct BerichtView: View {
                     } else if model.freigewordenerPlatz > 0 {
                         Text("\(Formatierung.gigabytes(model.freigewordenerPlatz)) frei geworden.")
                             .font(.title.bold())
+                    } else if model.erwarteteFreigabe() > 0 && model.speicherUnveraendert {
+                        Text("Jetzt noch Zuletzt gelöscht leeren, dann sind die \(Formatierung.gigabytes(model.erwarteteFreigabe())) frei.")
+                            .font(.title3)
                     } else if model.erwarteteFreigabe() > 0 {
                         Text("Etwa \(Formatierung.gigabytes(model.erwarteteFreigabe())) werden frei, sobald du Zuletzt gelöscht leerst.")
                             .font(.title3)
+                    }
+                    if model.berichtKopiert {
+                        Text("Bericht ist kopiert. Du kannst ihn jetzt schicken.")
+                            .font(.body)
                     }
                     if let nach = model.speicherNachher {
                         Text("Vorher \(Formatierung.gigabytes(model.freiVorher)) frei, jetzt \(Formatierung.gigabytes(nach.freiBytes)) frei.")
@@ -425,6 +516,9 @@ struct BerichtView: View {
                 }
                 .padding()
             }
+            Button("Speicher-Bericht kopieren") { model.berichtKopieren() }
+                .font(.body)
+                .frame(maxWidth: .infinity)
             Button("Neu prüfen") {
                 model.ergebnis = nil
                 model.fehlerText = nil

@@ -42,12 +42,18 @@ enum DemoDaten {
                 summe + (alle.first { $0.id == id }?.groesseBytes ?? 0)
             }
         }
+        let summe = alle.reduce(Int64(0)) { $0 + $1.groesseBytes }
+        let videos = alle.filter(\.istVideo).reduce(Int64(0)) { $0 + $1.groesseBytes }
         return ScanErgebnis(
             kandidaten: alle,
             kategorien: kategorien,
             duplikatGruppen: [DuplikatGruppe(behalten: dupA.id, loeschbar: [dupB.id])],
             serienGruppen: [DuplikatGruppe(behalten: s1.id, loeschbar: [s2.id, s3.id])],
-            bytesJeKategorie: bytes
+            bytesJeKategorie: bytes,
+            anzahlAssets: alle.count,
+            mediathekLokalBytes: summe,
+            videoLokalBytes: videos,
+            anzahlNurCloud: 0
         )
     }
 

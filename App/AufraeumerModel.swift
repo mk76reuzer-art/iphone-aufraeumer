@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 import AufraeumerKern
 
 struct AnzeigeZeile: Identifiable {
@@ -48,6 +49,8 @@ final class AufraeumerModel: ObservableObject {
     @Published var favoritenTrotzdem = false
     @Published var laufAbgebrochen = false
     @Published var berichtArt: LaufArt = .sichernUndLoeschen
+    @Published var ohneSicherungBestaetigt = false
+    @Published var berichtKopiert = false
 
     @Published var laufDateiIndex = 0
     @Published var laufDateiGesamt = 0
@@ -119,14 +122,15 @@ final class AufraeumerModel: ObservableObject {
     }
 
     func weiterVonAuswahl() {
-        if brauchtSicherung() && sicherung == nil {
-            fehlerText = "Bitte wähle einen Ordner. Tippe links auf iCloud Drive, Auf meinem iPhone oder deinen Stick, öffne den Ordner und tippe oben rechts auf Öffnen."
-            phase = .sichern
-            ordnerWaehlen = true
-            return
-        }
         fehlerText = nil
+        ohneSicherungBestaetigt = false
         phase = brauchtSicherung() ? .sichern : .bestaetigen
+    }
+
+    func ohneSicherungWeiter() {
+        ohneSicherungBestaetigt = true
+        fehlerText = nil
+        phase = .bestaetigen
     }
 
     func weiterVonSichern() {
@@ -149,6 +153,7 @@ final class AufraeumerModel: ObservableObject {
             sicherung = neu
             sicherOrdnerURL = gemerkt
             sicherOrdnerName = ICloudOrdnerSpeicher.anzeigename(fuer: gemerkt)
+            ohneSicherungBestaetigt = false
             fehlerText = nil
         } catch {
             sicherung = nil
@@ -198,6 +203,7 @@ final class AufraeumerModel: ObservableObject {
     }
 
     func modus(fuer id: String) -> Modus {
+        if ohneSicherungBestaetigt { return .nurLoeschen }
         let kat = kategorien(fuer: id)
         if kat.isEmpty { return .erstSichern }
         return sicherungsOptionen.effektiverModus(kategorien: kat)
@@ -211,15 +217,140 @@ final class AufraeumerModel: ObservableObject {
         scan?.kandidaten.first { $0.id == id }
     }
 
-    func freimachbareBytes() -> Int64 {
+    func bytesAusgewaehlt() -> Int64 {
+        ausgewaehlt.reduce(0) { summe, id in
+            guard let k = kandidat(id), Regeln.bringtPlatz(k) else { return summe }
+            return summe + k.groesseBytes
+        }
+    }
+
+    func moeglicherPlatz() -> Int64 {
         guard let scan else { return 0 }
         var bytes: [String: Int64] = [:]
-        for k in scan.kandidaten { bytes[k.id] = k.groesseBytes }
+        for k in scan.kandidaten where Regeln.bringtPlatz(k) {
+            bytes[k.id] = k.groesseBytes
+        }
         return PlatzRechnung.eindeutig(bytesJeId: bytes, kategorien: scan.kategorien)
     }
 
-    func bytesAusgewaehlt() -> Int64 {
-        ausgewaehlt.reduce(0) { $0 + (kandidat($1)?.groesseBytes ?? 0) }
+    func bilanzSatz() -> String {
+        let fotos = scan?.mediathekLokalBytes ?? speicher?.medienBelegtBytes ?? 0
+        let frei = moeglicherPlatz()
+        let belegt = speicher?.belegtBytes ?? 0
+        if frei >= 1_000_000_000 {
+            return "Fotos und Videos belegen \(Formatierung.gigabytes(fotos)). Davon kann diese App etwa \(Formatierung.gigabytes(frei)) freimachen."
+        }
+        if belegt > 0 && fotos * 2 < belegt {
+            return "Deine Fotos belegen nur \(Formatierung.gigabytes(fotos)). Der meiste Platz liegt in Apps und Nachrichten. Tippe auf Tipps, dort steht, wie du dort aufräumst."
+        }
+        return "Fotos und Videos belegen \(Formatierung.gigabytes(fotos)). Davon kann diese App etwa \(Formatierung.gigabytes(frei)) freimachen."
+    }
+
+    func groessteBrocken() -> [Kandidat] {
+        guard let scan else { return [] }
+        return scan.kandidaten
+            .filter { $0.groesseBytes > 0 || $0.istScreenshot }
+            .sorted { a, b in
+                if a.groesseBytes != b.groesseBytes { return a.groesseBytes > b.groesseBytes }
+                return a.id < b.id
+            }
+            .prefix(30)
+            .map { $0 }
+    }
+
+    func gruppenZeilen() -> [AnzeigeZeile] {
+        guard let scan else { return [] }
+        return Kategorie.allCases.compactMap { kat in
+            let ids = scan.kategorien[kat] ?? []
+            guard !ids.isEmpty else { return nil }
+            let summe = ids.reduce(Int64(0)) { $0 + (kandidat($1)?.groesseBytes ?? 0) }
+            return AnzeigeZeile(kat: kat, anzahl: ids.count, bytes: summe)
+        }
+    }
+
+    var pruefungLeerTrotzMedien: Bool {
+        guard let scan, scan.anzahlAssets > 0 else { return false }
+        return !scan.kandidaten.contains { $0.groesseBytes > 0 || $0.istScreenshot }
+    }
+
+    var verzichtetAufEmpfohleneSicherung: Bool {
+        ausgewaehlt.contains { id in
+            kategorien(fuer: id).contains(where: { $0.sichernNoetig }) && modus(fuer: id) == .nurLoeschen
+        }
+    }
+
+    var speicherUnveraendert: Bool {
+        guard let nach = speicherNachher else { return true }
+        return nach.freiBytes <= freiVorher
+    }
+
+    func erneutMessen() {
+        if demoModus { return }
+        let neu = SpeicherAnzeige.lesen()
+        speicherNachher = neu
+        if let neu {
+            var stand = speicher ?? neu
+            stand.freiBytes = neu.freiBytes
+            stand.belegtBytes = neu.belegtBytes
+            stand.gesamtBytes = neu.gesamtBytes
+            speicher = stand
+        }
+    }
+
+    func berichtKopieren() {
+        UIPasteboard.general.string = berichtText()
+        berichtKopiert = true
+    }
+
+    func berichtText() -> String {
+        var zeilen: [String] = []
+        zeilen.append("Aufräumer \(Kern.version)")
+        if let s = speicher {
+            zeilen.append("Frei: \(Formatierung.gigabytes(s.freiBytes)) von \(Formatierung.gigabytes(s.gesamtBytes))")
+            zeilen.append("Belegt: \(Formatierung.gigabytes(s.belegtBytes))")
+        } else {
+            zeilen.append("Speicher: nicht gemessen")
+        }
+        if let scan {
+            zeilen.append("Fotomediathek auf dem iPhone: \(Formatierung.gigabytes(scan.mediathekLokalBytes))")
+            zeilen.append("Davon Videos: \(Formatierung.gigabytes(scan.videoLokalBytes))")
+            zeilen.append("Einträge: \(scan.anzahlAssets), nur in iCloud: \(scan.anzahlNurCloud)")
+            zeilen.append("Davon kann die App etwa \(Formatierung.gigabytes(moeglicherPlatz())) freimachen.")
+            for zeile in gruppenZeilen() {
+                zeilen.append("\(zeile.kat.anzeigeName): \(zeile.anzahl), \(Formatierung.gigabytes(zeile.bytes))")
+            }
+        } else {
+            zeilen.append("Fotomediathek: nicht gelesen")
+        }
+        if ICloudFotosSpeicher.wurdeGefragt {
+            zeilen.append(ICloudFotosSpeicher.nutzerSagtAktiv ? "iCloud-Fotos: an" : "iCloud-Fotos: aus")
+        } else {
+            zeilen.append("iCloud-Fotos: nicht gefragt")
+        }
+        if let e = ergebnis {
+            zeilen.append("Letzter Lauf: \(e.geloescht.count) erledigt, \(e.nichtGeloescht.count) nicht erledigt")
+            for grund in Set(e.nichtGeloescht.values).sorted() {
+                zeilen.append("Hinweis: \(Self.ohneDateiNamen(grund))")
+            }
+        } else {
+            zeilen.append("Letzter Lauf: noch keiner")
+        }
+        if let fehler = fehlerText {
+            zeilen.append("Letzter Hinweis: \(Self.ohneDateiNamen(fehler))")
+        }
+        if pruefungLeerTrotzMedien {
+            zeilen.append("Prüfen fand trotz Mediathek keine Größe.")
+        }
+        return zeilen.joined(separator: "\n")
+    }
+
+    private static func ohneDateiNamen(_ text: String) -> String {
+        let klein = text.lowercased()
+        let endungen = [".jpg", ".jpeg", ".png", ".heic", ".mov", ".mp4", ".dng", ".gif"]
+        if text.contains("/") || endungen.contains(where: { klein.contains($0) }) {
+            return "Ein Hinweis wurde ausgelassen, weil er einen Dateinamen enthalten kann."
+        }
+        return text
     }
 
     func zeilen() -> [AnzeigeZeile] {
@@ -248,7 +379,7 @@ final class AufraeumerModel: ObservableObject {
         let bytes = bytesAusgewaehlt()
         switch schritt {
         case .pruefen:
-            let summe = freimachbareBytes()
+            let summe = moeglicherPlatz()
             return summe > 0
                 ? "Etwa \(Formatierung.gigabytes(summe)) kannst du freimachen."
                 : "Hier siehst du, was du aufräumen kannst."
@@ -337,11 +468,14 @@ final class AufraeumerModel: ObservableObject {
             scan = ergebnis
             ausgewaehlt = Self.sichereVorauswahl(ergebnis: ergebnis)
             if var s = speicher {
-                s.medienBelegtBytes = freimachbareBytes()
-                s.groessteKategorie = zeilen().max(by: { $0.bytes < $1.bytes }).flatMap { zeile in
-                    zeile.bytes > 0 ? (zeile.kat.anzeigeName, zeile.bytes) : nil
+                s.medienBelegtBytes = ergebnis.mediathekLokalBytes
+                s.groessteKategorie = gruppenZeilen().max(by: { $0.bytes < $1.bytes }).map { zeile in
+                    (zeile.kat.anzeigeName, zeile.bytes)
                 }
                 speicher = s
+            }
+            if pruefungLeerTrotzMedien {
+                fehlerText = "Die Mediathek hat \(ergebnis.anzahlAssets) Einträge, aber das Prüfen hat keine Größe und kein Bildschirmfoto gelesen. Das ist ein Fehler. Kopiere den Speicher-Bericht und schick ihn mit."
             }
             phase = .uebersicht
         } catch is CancellationError {
@@ -456,16 +590,18 @@ final class AufraeumerModel: ObservableObject {
 
     static func sichereVorauswahl(ergebnis: ScanErgebnis) -> Set<String> {
         var ids = Set<String>()
-        for g in ergebnis.duplikatGruppen + ergebnis.serienGruppen {
-            for id in g.loeschbar {
-                if let k = ergebnis.kandidaten.first(where: { $0.id == id }),
-                   !k.istFavorit, !k.istAusgeblendet { ids.insert(id) }
-            }
+        func darfVoraus(_ id: String) -> Bool {
+            guard let k = ergebnis.kandidaten.first(where: { $0.id == id }) else { return false }
+            return Regeln.bringtPlatz(k) && !k.istFavorit && !k.istAusgeblendet
         }
-        for k in ergebnis.kandidaten {
-            let kat = Regeln.kategorien(fuer: k, jetzt: Date())
-            guard kat.contains(.alteScreenshots), !k.istFavorit, !k.istAusgeblendet else { continue }
-            ids.insert(k.id)
+        for g in ergebnis.duplikatGruppen + ergebnis.serienGruppen {
+            for id in g.loeschbar where darfVoraus(id) { ids.insert(id) }
+        }
+        let vorab: [Kategorie] = [
+            .alteScreenshots, .grosseVideos, .langeVideos, .bildschirmaufnahmen, .whatsAppVideos
+        ]
+        for kat in vorab {
+            for id in ergebnis.kategorien[kat] ?? [] where darfVoraus(id) { ids.insert(id) }
         }
         return ids
     }

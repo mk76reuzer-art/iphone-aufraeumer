@@ -10,7 +10,8 @@ public enum KategorieBlick {
 /// Summen für die Anzeige. Jede Datei zählt nur einmal, auch wenn sie in zwei Gruppen steht.
 public enum PlatzRechnung {
     public static let reihenfolge: [Kategorie] = [
-        .grosseVideos, .langeUnberuehrt, .duplikate, .serienbilder, .alteScreenshots
+        .grosseVideos, .langeVideos, .bildschirmaufnahmen, .whatsAppVideos,
+        .rawFotos, .liveFotos, .langeUnberuehrt, .duplikate, .serienbilder, .alteScreenshots
     ]
 
     public static func eindeutig(bytesJeId: [String: Int64], kategorien: [Kategorie: Set<String>]) -> Int64 {

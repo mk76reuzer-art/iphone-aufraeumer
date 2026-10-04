@@ -65,20 +65,40 @@ final class PhotoKitBibliothek: MedienBibliothek, @unchecked Sendable {
     }
 }
 
+struct LokalBefund {
+    var groesse: Int64
+    /// nil heißt: nicht feststellbar. Dann gilt die Datei als auf dem iPhone.
+    var lokal: Bool?
+    var name: String
+}
+
 enum PhotoKitHilfen {
-    static func groesseUndLokal(asset: PHAsset) -> (groesse: Int64, lokal: Bool, name: String) {
+    static func groesseUndLokal(asset: PHAsset) -> LokalBefund {
         let ressourcen = PHAssetResource.assetResources(for: asset)
         let haupt = ressourcen.first(where: { $0.type == .fullSizeVideo || $0.type == .video })
             ?? ressourcen.first(where: { $0.type == .photo || $0.type == .fullSizePhoto })
             ?? ressourcen.first
-        guard let res = haupt else { return (0, false, asset.localIdentifier) }
-        var groesse: Int64 = 0
-        var lokal = false
-        if res.responds(to: NSSelectorFromString("fileSize")),
-           let n = res.value(forKey: "fileSize") as? NSNumber { groesse = n.int64Value }
-        if res.responds(to: NSSelectorFromString("locallyAvailable")),
-           let n = res.value(forKey: "locallyAvailable") as? NSNumber { lokal = n.boolValue }
-        return (groesse, lokal, res.originalFilename)
+        guard let res = haupt else {
+            return LokalBefund(groesse: 0, lokal: nil, name: asset.localIdentifier)
+        }
+        let groesse = int64WennVorhanden(res, "fileSize") ?? 0
+        // Der private Getter heißt je nach System isLocallyAvailable oder locallyAvailable.
+        // value(forKey:) nur nach responds(to:), sonst NSUnknownKeyException.
+        let lokal = boolWennVorhanden(res, "isLocallyAvailable")
+            ?? boolWennVorhanden(res, "locallyAvailable")
+        return LokalBefund(groesse: groesse, lokal: lokal, name: res.originalFilename)
+    }
+
+    private static func boolWennVorhanden(_ obj: NSObject, _ key: String) -> Bool? {
+        let sel = NSSelectorFromString(key)
+        guard obj.responds(to: sel), let n = obj.value(forKey: key) as? NSNumber else { return nil }
+        return n.boolValue
+    }
+
+    private static func int64WennVorhanden(_ obj: NSObject, _ key: String) -> Int64? {
+        let sel = NSSelectorFromString(key)
+        guard obj.responds(to: sel), let n = obj.value(forKey: key) as? NSNumber else { return nil }
+        return n.int64Value
     }
 
     static func inBenutzerAlbum(asset: PHAsset) -> Bool {

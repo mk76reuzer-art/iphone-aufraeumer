@@ -39,8 +39,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.mk76reuzer.aufraeumer
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1"
-        MARKETING_VERSION: "0.3.0"
-        CURRENT_PROJECT_VERSION: "3"
+        MARKETING_VERSION: "0.4.0"
+        CURRENT_PROJECT_VERSION: "4"
     preBuildScripts:
       - name: Simulatorbilder
         basedOnDependencyAnalysis: false

@@ -27,14 +27,10 @@ enum MediathekProbe {
             let ressourcen = PHAssetResource.assetResources(for: asset)
             let haupt = ressourcen.first(where: { $0.type == .video || $0.type == .fullSizeVideo }) ?? ressourcen.first
             guard let haupt = haupt else { return }
-            var groesse: Int64 = 0
-            var lokal = false
-            // Diese Schlüssel sind nicht offiziell dokumentiert; vorher prüfen, um Abstürze zu vermeiden.
-            if haupt.responds(to: NSSelectorFromString("fileSize")),
-               let n = haupt.value(forKey: "fileSize") as? NSNumber { groesse = n.int64Value }
-            if haupt.responds(to: NSSelectorFromString("locallyAvailable")),
-               let n = haupt.value(forKey: "locallyAvailable") as? NSNumber { lokal = n.boolValue }
-            if lokal { lokaleVideos += 1; lokalGesamt += groesse }
+            let meta = PhotoKitHilfen.groesseUndLokal(asset: asset)
+            let groesse = meta.groesse
+            let lokal = meta.lokal ?? true
+            if lokal && groesse > 0 { lokaleVideos += 1; lokalGesamt += groesse }
             groesste.append((Double(groesse) / 1_000_000, asset.isHidden, lokal, haupt.originalFilename))
         }
 

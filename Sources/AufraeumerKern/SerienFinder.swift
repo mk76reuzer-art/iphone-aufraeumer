@@ -8,7 +8,8 @@ public enum SerienFinder {
         mindestAnzahl: Int = 3
     ) -> [DuplikatGruppe] {
         guard mindestAnzahl >= 2 else { return [] }
-        let tauglich = eintraege.filter { $0.kandidat.istLokalVorhanden && $0.kandidat.groesseBytes > 0 && !$0.kandidat.istVideo }
+        // Auch nur in iCloud: Serien werden gezählt. Die Oberfläche sagt dann, dass Löschen die Cloud mittrifft.
+        let tauglich = eintraege.filter { $0.kandidat.groesseBytes > 0 && !$0.kandidat.istVideo }
         let nachSerie = Dictionary(grouping: tauglich, by: \.serienKennung)
         var ergebnis: [DuplikatGruppe] = []
 
