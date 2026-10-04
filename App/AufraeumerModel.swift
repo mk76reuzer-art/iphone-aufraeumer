@@ -222,6 +222,7 @@ final class AufraeumerModel: ObservableObject {
         let gruppen = scan.duplikatGruppen + scan.serienGruppen
         laufDateiGesamt = auswahl.count
         laufDateiIndex = 0
+        laufErledigtZaehler = 0
 
         sicherung?.uploadFortschritt = { [weak self] p in
             Task { @MainActor in self?.uploadProzent = p }
@@ -295,6 +296,15 @@ final class AufraeumerModel: ObservableObject {
         let vergangen = Date().timeIntervalSince(start)
         let gesamt = vergangen / laufFortschritt
         return Formatierung.restzeit(sekunden: gesamt - vergangen)
+    }
+
+    private var laufErledigtZaehler = 0
+
+    func laufEintragAktualisieren(_ eintrag: ProtokollEintrag) {
+        laufErledigtZaehler += 1
+        laufDateiIndex = min(laufErledigtZaehler, laufDateiGesamt)
+        laufFortschritt = laufDateiGesamt > 0 ? Double(laufErledigtZaehler) / Double(laufDateiGesamt) : 1
+        laufText = eintrag.name
     }
 
     func abbrechenOhneVerlust() {
