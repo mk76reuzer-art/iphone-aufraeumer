@@ -50,9 +50,11 @@ final class ICloudSicherung: Sicherung, @unchecked Sendable {
     func istHochgeladen(_ beleg: SicherungsBeleg) async throws -> Bool {
         let url = try url(fuer: beleg)
         let w = try url.resourceValues(forKeys: [
+            .isUbiquitousItemKey,
             .ubiquitousItemIsUploadedKey,
             .ubiquitousItemIsUploadingKey
         ])
+        if w.isUbiquitousItem != true { return true }
         if w.ubiquitousItemIsUploading == true {
             uploadFortschritt?(0.5)
         }
@@ -74,7 +76,7 @@ enum ICloudOrdnerSpeicher {
     private static let key = "aufraeumer.icloud.ordner"
 
     static func speichern(_ url: URL) throws {
-        let daten = try url.bookmarkData(options: .minimalBookmark, includingResourceValuesForKeys: nil,
+        let daten = try url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil,
                                          relativeTo: nil)
         UserDefaults.standard.set(daten, forKey: key)
     }
@@ -82,7 +84,7 @@ enum ICloudOrdnerSpeicher {
     static func laden() -> URL? {
         guard let daten = UserDefaults.standard.data(forKey: key) else { return nil }
         var veraltet = false
-        return try? URL(resolvingBookmarkData: daten, options: [], relativeTo: nil,
+        return try? URL(resolvingBookmarkData: daten, options: .withSecurityScope, relativeTo: nil,
                         bookmarkDataIsStale: &veraltet)
     }
 }

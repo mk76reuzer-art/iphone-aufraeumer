@@ -1,26 +1,43 @@
 import SwiftUI
 import UIKit
-import UniformTypeIdentifiers
 import AufraeumerKern
 
 struct StartView: View {
     @StateObject private var model = AufraeumerModel()
+    @State private var tippsOffen = false
 
     var body: some View {
         NavigationStack {
             ZStack {
                 inhalt
                 if model.phase == .scannt || model.phase == .lauf {
-                    FortschrittOverlay(
-                        prozent: model.phase == .scannt ? model.scanFortschritt : model.laufFortschritt,
-                        text: model.phase == .scannt ? model.scanText : model.laufText,
-                        upload: model.uploadProzent
-                    )
+                    FortschrittOverlay(model: model)
                 }
             }
-            .navigationTitle("Aufräumer")
-            .fileImporter(isPresented: $model.ordnerWaehlen, allowedContentTypes: [.folder]) { ergebnis in
-                if case .success(let url) = ergebnis { model.ordnerGewaehlt(url) }
+            .navigationTitle("Aufräumen")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    if model.phase == .uebersicht || model.phase == .auswahl {
+                        Button("Tipps") { tippsOffen = true }
+                    }
+                }
+                ToolbarItem(placement: .topBarLeading) {
+                    if model.phase != .scannt && model.phase != .lauf && model.phase != .start {
+                        Button("Abbrechen") { model.abbrechenOhneVerlust() }
+                    }
+                }
+            }
+            .navigationDestination(isPresented: $tippsOffen) { TippsView() }
+            .sheet(isPresented: $model.ordnerWaehlen) {
+                OrdnerAuswahl(istAktiv: $model.ordnerWaehlen,
+                              onGewaehlt: { model.ordnerGewaehlt($0) },
+                              onAbbruch: { model.ordnerAbbruch() })
+            }
+            .sheet(isPresented: $model.iCloudFotosFrageOffen) {
+                ICloudFotosFrageSheet(erledigt: .constant(true))
+            }
+            .sheet(isPresented: $model.zeigeVideoVerkleinern) {
+                VideoVerkleinernSheet(model: model)
             }
             .task { await model.beimStart() }
         }
@@ -36,7 +53,7 @@ struct StartView: View {
         case .auswahl:
             AuswahlView(model: model)
         case .sichern:
-            ICloudHinweisView(model: model)
+            SichernView(model: model)
         case .bestaetigen:
             BestaetigenView(model: model)
         case .bericht:
@@ -48,22 +65,30 @@ struct StartView: View {
 }
 
 private struct FortschrittOverlay: View {
-    let prozent: Double
-    let text: String
-    let upload: Double
+    @ObservedObject var model: AufraeumerModel
 
     var body: some View {
         VStack(spacing: 16) {
-            ProgressView(value: prozent)
+            if model.phase == .lauf {
+                SchrittLeiste(aktuell: model.aktuellerSchritt(), nutzenSatz: model.nutzenSatz(fuer: model.aktuellerSchritt()))
+            }
+            ProgressView(value: model.phase == .scannt ? model.scanFortschritt : model.laufFortschritt)
                 .progressViewStyle(.linear)
                 .tint(.accentColor)
-            Text(Formatierung.prozent(prozent))
+            Text(Formatierung.prozent(model.phase == .scannt ? model.scanFortschritt : model.laufFortschritt))
                 .font(.largeTitle.bold())
-            if upload > 0 {
-                Text("Hochladen: \(Formatierung.prozent(upload))")
+            if model.uploadProzent > 0 {
+                Text("In die Cloud: \(Formatierung.prozent(model.uploadProzent))")
                     .font(.title3)
             }
-            Text(text)
+            if model.phase == .lauf && model.laufDateiGesamt > 0 {
+                Text("Datei \(model.laufDateiIndex) von \(model.laufDateiGesamt)")
+                    .font(.body)
+                if !model.laufRestzeitText.isEmpty {
+                    Text(model.laufRestzeitText).font(.subheadline).foregroundStyle(.secondary)
+                }
+            }
+            Text(model.phase == .scannt ? model.scanText : model.laufText)
                 .font(.body)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
@@ -80,22 +105,23 @@ struct UebersichtView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            SchrittLeiste(aktuell: .pruefen, nutzenSatz: model.nutzenSatz(fuer: .pruefen))
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     speicherKarte
                     if let fehler = model.fehlerText {
                         Text(fehler).foregroundStyle(.red).font(.body)
                     }
+                    videoBlock
                     Text("Aufräum-Vorschläge")
                         .font(.title2.bold())
                     ForEach(Kategorie.allCases, id: \.self) { kat in
                         kategorieZeile(kat)
                     }
-                    ordnerZeile
                 }
                 .padding()
             }
-            HauptButton(titel: "Auswahl prüfen", aktiv: model.scan != nil) {
+            HauptButton(titel: "Auswählen", aktiv: model.scan != nil) {
                 model.weiterVonUebersicht()
             }
         }
@@ -109,7 +135,7 @@ struct UebersichtView: View {
                 Text("von \(Formatierung.gigabytes(s.gesamtBytes)) auf dem iPhone")
                     .font(.title3)
                 if let g = s.groessteKategorie, g.bytes > 0 {
-                    Text("Am meisten zum Aufräumen: \(g.name) (\(Formatierung.gigabytes(g.bytes)))")
+                    Text("Am meisten Platz: \(g.name) (\(Formatierung.gigabytes(g.bytes)))")
                         .font(.body)
                         .foregroundStyle(.secondary)
                 }
@@ -122,6 +148,24 @@ struct UebersichtView: View {
         .padding()
         .background(Color.accentColor.opacity(0.12))
         .cornerRadius(12)
+        .accessibilityIdentifier("speicher-karte")
+    }
+
+    @ViewBuilder
+    private var videoBlock: some View {
+        let spare = model.geschaetzteVideoErsparnis()
+        if spare > 0 {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Videos verkleinern").font(.headline)
+                Text("Große Videos in kleinere Qualität umwandeln – geschätzt \(Formatierung.gigabytes(spare)) weniger.")
+                    .font(.body)
+                Button("Videos ansehen") { model.zeigeVideoVerkleinern = true }
+                    .buttonStyle(.bordered)
+            }
+            .padding()
+            .background(Color.green.opacity(0.1))
+            .cornerRadius(12)
+        }
     }
 
     private func kategorieZeile(_ kat: Kategorie) -> some View {
@@ -140,44 +184,50 @@ struct UebersichtView: View {
         }
         .padding(.vertical, 4)
     }
-
-    private var ordnerZeile: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Sicherung").font(.headline)
-            Text(model.iCloudOrdnerName.map { "iCloud Drive: \($0)" } ?? "Noch kein Ordner gewählt")
-                .font(.body)
-            Button("iCloud-Ordner wählen") { model.ordnerWaehlen = true }
-        }
-        .padding(.top, 8)
-    }
 }
 
 struct AuswahlView: View {
     @ObservedObject var model: AufraeumerModel
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack {
-            Text("Markierte Dateien: \(model.ausgewaehlt.count)")
-                .font(.title3)
-            Text("Freiwerdend ca. \(Formatierung.gigabytes(model.bytesAusgewaehlt()))")
-                .font(.body)
+        VStack(spacing: 0) {
+            SchrittLeiste(aktuell: .auswaehlen, nutzenSatz: model.nutzenSatz(fuer: .auswaehlen))
             List {
-                ForEach(gruppiert, id: \.kat) { block in
-                    Section(block.kat.anzeigeName) {
-                        ForEach(block.ids, id: \.self) { id in
-                            zeile(id: id)
+                sicherungsOptionen
+                Section("Deine Auswahl") {
+                    Text("Markiert: \(model.ausgewaehlt.count)")
+                    ForEach(gruppiert, id: \.kat) { block in
+                        Section(block.kat.anzeigeName) {
+                            ForEach(block.ids, id: \.self) { id in
+                                zeile(id: id)
+                            }
                         }
                     }
                 }
             }
-            HauptButton(titel: "Weiter") { model.weiterVonAuswahl() }
-        }
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button("Zurück") { model.phase = .uebersicht }
+            HauptButton(titel: "Weiter", aktiv: !model.ausgewaehlt.isEmpty) {
+                model.weiterVonAuswahl()
             }
+        }
+    }
+
+    private func sicherungBinding(_ keyPath: WritableKeyPath<SicherungsOptionen, Bool>) -> Binding<Bool> {
+        Binding(
+            get: { model.sicherungsOptionen[keyPath: keyPath] },
+            set: { neu in
+                var o = model.sicherungsOptionen
+                o[keyPath: keyPath] = neu
+                model.sicherungsOptionen = o
+            })
+    }
+
+    private var sicherungsOptionen: some View {
+        Section("Sicherung (optional)") {
+            Text("Doppelte, Serien und Bildschirmfotos brauchen normalerweise keine Kopie. Du kannst es trotzdem einschalten.")
+                .font(.footnote)
+            Toggle("Doppelte auch sichern", isOn: sicherungBinding(\.duplikateSichern))
+            Toggle("Serienbilder auch sichern", isOn: sicherungBinding(\.serienSichern))
+            Toggle("Bildschirmfotos auch sichern", isOn: sicherungBinding(\.screenshotsSichern))
         }
     }
 
@@ -189,7 +239,7 @@ struct AuswahlView: View {
     private var gruppiert: [Block] {
         guard let scan = model.scan else { return [] }
         return Kategorie.allCases.compactMap { kat in
-            let ids = scan.kategorien[kat]?.sorted() ?? []
+            let ids = (scan.kategorien[kat] ?? []).sorted()
             guard !ids.isEmpty else { return nil }
             return Block(kat: kat, ids: ids)
         }
@@ -219,18 +269,26 @@ struct AuswahlView: View {
     }
 }
 
-struct ICloudHinweisView: View {
+struct SichernView: View {
     @ObservedObject var model: AufraeumerModel
 
     var body: some View {
         VStack(spacing: 16) {
-            Text("Vor dem Löschen sichern")
+            SchrittLeiste(aktuell: .sichern, nutzenSatz: model.nutzenSatz(fuer: .sichern))
+            Text("Sicherungsordner")
                 .font(.title.bold())
-            Text("Große Videos und alte Aufnahmen werden zuerst in deinen iCloud-Drive-Ordner kopiert. Gelöscht wird nur, was dort angekommen ist.")
+            Text(model.sicherOrdnerName.map { "Gewählt: \($0)" } ?? "Noch kein Ordner")
+                .font(.title3)
+            Text("Tippe unten, um in der Dateien-App einen Ordner zu wählen – zum Beispiel iCloud Drive, Auf meinem iPhone oder einen Stick.")
                 .multilineTextAlignment(.center)
-                .padding()
-            HauptButton(titel: "Weiter zur Bestätigung") { model.phase = .bestaetigen }
-            Button("Zurück") { model.phase = .auswahl }
+                .padding(.horizontal)
+            Button("Ordner wählen") { model.ordnerWaehlen = true }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+            Spacer()
+            HauptButton(titel: "Weiter zum Löschen", aktiv: model.hatSicherungsordner) {
+                model.weiterVonSichern()
+            }
         }
         .padding()
     }
@@ -241,22 +299,23 @@ struct BestaetigenView: View {
 
     var body: some View {
         VStack(spacing: 16) {
+            SchrittLeiste(aktuell: .loeschen, nutzenSatz: model.nutzenSatz(fuer: .loeschen))
             Text("Letzte Bestätigung")
                 .font(.title.bold())
-            Text("\(model.ausgewaehlt.count) Dateien, ca. \(Formatierung.gigabytes(model.bytesAusgewaehlt()))")
+            Text("\(model.ausgewaehlt.count) Dateien, etwa \(Formatierung.gigabytes(model.bytesAusgewaehlt()))")
                 .font(.title2)
+            if ICloudFotosSpeicher.nutzerSagtAktiv {
+                Text("Mit iCloud-Fotos werden die Dateien auch aus der Cloud entfernt.")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+            }
             Text("Danach fragt das iPhone noch einmal, ob du wirklich löschen willst.")
                 .multilineTextAlignment(.center)
                 .padding()
-            if model.brauchtSicherung() {
-                Text("Zuerst Sicherung nach iCloud Drive, dann Löschen.")
-                    .font(.body)
-            }
-            HauptButton(titel: "Jetzt starten", aktiv: !model.ausgewaehlt.isEmpty) {
-                model.phase = .lauf
+            HauptButton(titel: "Jetzt löschen", aktiv: !model.ausgewaehlt.isEmpty) {
                 Task { await model.loeschenBestaetigt() }
             }
-            Button("Zurück") { model.phase = .auswahl }
+            Button("Zurück") { model.phase = model.brauchtSicherung() ? .sichern : .auswahl }
         }
         .padding()
     }
@@ -267,34 +326,74 @@ struct BerichtView: View {
 
     var body: some View {
         VStack(spacing: 16) {
+            SchrittLeiste(aktuell: .loeschen, nutzenSatz: "Fertig – so holst du den Speicher zurück.")
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Fertig")
+                    Text("Geschafft")
                         .font(.largeTitle.bold())
                     if model.freigewordenerPlatz > 0 {
-                        Text("Etwa \(Formatierung.gigabytes(model.freigewordenerPlatz)) mehr frei.")
-                            .font(.title2)
-                    } else if let s = model.speicherNachher {
-                        Text("Aktuell \(Formatierung.gigabytes(s.freiBytes)) frei.")
+                        Text("\(Formatierung.gigabytes(model.freigewordenerPlatz)) frei geworden.")
                             .font(.title2)
                     }
+                    if let vor = model.speicher, let nach = model.speicherNachher {
+                        Text("Vorher \(Formatierung.gigabytes(vor.freiBytes)) frei, jetzt \(Formatierung.gigabytes(nach.freiBytes)) frei.")
+                            .font(.body)
+                    }
                     if let e = model.ergebnis {
-                        Text("Gelöscht: \(e.geloescht.count)")
+                        Text("Entfernt: \(e.geloescht.count)")
                         if !e.nichtGeloescht.isEmpty {
-                            Text("Nicht gelöscht: \(e.nichtGeloescht.count)")
+                            Text("\(e.nichtGeloescht.count) konnten nicht gelöscht werden.")
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    Text("Wichtig: In der Fotos-App unter „Zuletzt gelöscht“ noch „Alle löschen“ tippen, damit der Speicher wirklich frei wird.")
-                        .font(.body)
-                        .padding(.top, 8)
+                    ZuletztGeloeschtAnleitung()
                 }
                 .padding()
             }
             HauptButton(titel: "Fotos-App öffnen") { FotosAppOeffner.oeffnen() }
-            HauptButton(titel: "Neu scannen") {
+            HauptButton(titel: "Neu prüfen") {
                 model.ergebnis = nil
                 Task { await model.scanStarten() }
+            }
+        }
+    }
+}
+
+struct VideoVerkleinernSheet: View {
+    @ObservedObject var model: AufraeumerModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var auswahl: Set<String> = []
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Text("Geschätzte Ersparnis: \(Formatierung.gigabytes(model.geschaetzteVideoErsparnis()))")
+                ForEach(model.grosseVideoKandidaten(), id: \.id) { k in
+                    Toggle(isOn: Binding(
+                        get: { auswahl.contains(k.id) },
+                        set: { an in if an { auswahl.insert(k.id) } else { auswahl.remove(k.id) } }
+                    )) {
+                        VStack(alignment: .leading) {
+                            Text(k.name)
+                            Text(Formatierung.gigabytes(k.groesseBytes)).font(.caption)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Videos verkleinern")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Schließen") { dismiss() }
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                HauptButton(titel: "Verkleinern starten", aktiv: !auswahl.isEmpty) {
+                    dismiss()
+                    Task { await model.videosVerkleinernStarten(ids: auswahl) }
+                }
+            }
+            .onAppear {
+                auswahl = Set(model.grosseVideoKandidaten().map(\.id))
             }
         }
     }

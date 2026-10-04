@@ -141,4 +141,11 @@ enum ScanFehler: LocalizedError {
             return "Bitte in den Einstellungen „Alle Fotos“ erlauben, damit der Aufräumer helfen kann."
         }
     }
+
+    static func hilfeText(fuer error: Error) -> String {
+        if let s = error as? ScanFehler, s == .keinZugriff {
+            return "Kein Zugriff auf Fotos. Öffne die Einstellungen, tippe auf Datenschutz und Fotos, und erlaube dem Aufräumer vollen Zugriff."
+        }
+        return error.localizedDescription
+    }
 }

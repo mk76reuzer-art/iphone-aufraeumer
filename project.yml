@@ -6,6 +6,16 @@ options:
 packages:
   AufraeumerKern:
     path: .
+schemes:
+  Aufraeumer:
+    build:
+      targets:
+        Aufraeumer: all
+        AufraeumerUITests: [test]
+    test:
+      targets:
+        - AufraeumerUITests
+
 targets:
   Aufraeumer:
     type: application
@@ -19,6 +29,7 @@ targets:
       properties:
         CFBundleDisplayName: Aufräumer
         NSPhotoLibraryUsageDescription: "Der Aufräumer zeigt dir große und überflüssige Fotos und Videos und löscht nur, was du ausdrücklich bestätigst."
+        NSPhotoLibraryAddUsageDescription: "Verkleinerte Videos werden in deiner Fotomediathek gespeichert."
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
@@ -27,5 +38,14 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.mk76reuzer.aufraeumer
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1"
-        MARKETING_VERSION: "0.2.0"
-        CURRENT_PROJECT_VERSION: "1"
+        MARKETING_VERSION: "0.3.0"
+        CURRENT_PROJECT_VERSION: "2"
+  AufraeumerUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: Aufraeumer
+    settings:
+      base:
+        SWIFT_VERSION: "5.9"

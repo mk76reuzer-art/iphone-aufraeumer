@@ -17,4 +17,11 @@ enum Formatierung {
     static func datum(_ d: Date) -> String {
         d.formatted(date: .abbreviated, time: .omitted)
     }
+
+    static func restzeit(sekunden: TimeInterval) -> String {
+        guard sekunden.isFinite, sekunden > 3 else { return "gleich fertig" }
+        if sekunden < 60 { return "noch etwa \(Int(sekunden)) Sekunden" }
+        let min = Int(sekunden / 60)
+        return "noch etwa \(min) Minuten"
+    }
 }
