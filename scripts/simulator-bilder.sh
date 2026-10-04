@@ -17,6 +17,7 @@ if [ -z "$GERAET" ]; then
 fi
 echo "Geraet: ${GERAET:-keins}"
 STATUS=1
+LOG=/tmp/aufraeumer-shots/xcodebuild.log
 if [ -n "$GERAET" ]; then
   set +e
   xcodebuild -project "${SRCROOT}/Aufraeumer.xcodeproj" -scheme Aufraeumer \
@@ -24,7 +25,7 @@ if [ -n "$GERAET" ]; then
     -destination "platform=iOS Simulator,name=${GERAET}" \
     -only-testing:AufraeumerUITests/ScreenshotTests/testAlleBildschirme \
     -resultBundlePath /tmp/aufraeumer-xcresult/TestResults.xcresult \
-    test
+    test >"$LOG" 2>&1
   STATUS=$?
   set -e
 fi
@@ -36,4 +37,7 @@ fi
 echo "$STATUS" > /tmp/aufraeumer-shots/status.txt
 echo "Screenshot-Status: $STATUS"
 find /tmp/aufraeumer-shots -name "*.png" | wc -l
-exit 0
+if [ "$STATUS" -ne 0 ] && [ -f "$LOG" ]; then
+  sed 's/error:/Hinweis:/g' "$LOG" | tail -n 80
+fi
+exit "$STATUS"
