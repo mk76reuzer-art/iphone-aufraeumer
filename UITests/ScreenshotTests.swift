@@ -41,24 +41,24 @@ final class ScreenshotTests: XCTestCase {
 
     func testPruefenFindetEingespielteMedien() throws {
         let app = XCUIApplication()
+        let system = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        addUIInterruptionMonitor(withDescription: "Fotos erlauben") { alert in
+            self.tippeErlauben(alert)
+        }
         app.launchArguments = ["-AppleLanguages", "(de)", "-AppleLocale", "de_DE"]
         app.launch()
 
-        let nein = app.buttons["Nein, nur auf dem iPhone"]
-        if nein.waitForExistence(timeout: 8) {
-            nein.tap()
-        }
-        let voll = app.buttons["Vollen Zugriff erlauben"]
-        if voll.waitForExistence(timeout: 4) {
-            voll.tap()
-        }
-        let englisch = app.buttons["Allow Full Access"]
-        if englisch.waitForExistence(timeout: 2) {
-            englisch.tap()
-        }
+        tippe(app, "Nein, nur auf dem iPhone", 6)
+        erlaubenTippen(app)
+        erlaubenTippen(system)
+        app.swipeUp()
 
         let video = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "grosses-video")).firstMatch
-        let videoDa = video.waitForExistence(timeout: 150)
+        var videoDa = video.waitForExistence(timeout: 45)
+        if !videoDa, app.buttons["Erneut versuchen"].waitForExistence(timeout: 2) {
+            app.buttons["Erneut versuchen"].tap()
+            videoDa = video.waitForExistence(timeout: 45)
+        }
         if videoDa {
             app.swipeUp()
         }
@@ -76,10 +76,44 @@ final class ScreenshotTests: XCTestCase {
         let gleich = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "gleich-a")).firstMatch
         let doppel = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Doppelte Fotos")).firstMatch
         let knopf = app.descendants(matching: .any)["knopf-freimachen"]
-        XCTAssertTrue(videoDa, "grosses-video nicht sichtbar")
-        XCTAssertTrue(bild.exists, "Bildschirmfoto nicht sichtbar")
-        XCTAssertTrue(gleich.exists, "gleiches Bild nicht sichtbar")
-        XCTAssertTrue(doppel.exists, "Doppelte Fotos nicht sichtbar")
-        XCTAssertTrue(knopf.waitForExistence(timeout: 15), "Knopf freimachen fehlt")
+        let sichtbar = app.staticTexts.allElementsBoundByIndex.prefix(25).map(\.label).joined(separator: " | ")
+        XCTAssertTrue(videoDa, "grosses-video nicht sichtbar. Sichtbar: \(sichtbar)")
+        XCTAssertTrue(bild.waitForExistence(timeout: 5), "Bildschirmfoto nicht sichtbar. Sichtbar: \(sichtbar)")
+        XCTAssertTrue(gleich.exists, "gleiches Bild nicht sichtbar. Sichtbar: \(sichtbar)")
+        XCTAssertTrue(doppel.exists, "Doppelte Fotos nicht sichtbar. Sichtbar: \(sichtbar)")
+        XCTAssertTrue(knopf.waitForExistence(timeout: 15), "Knopf freimachen fehlt. Sichtbar: \(sichtbar)")
+    }
+
+    private func erlaubenTippen(_ app: XCUIApplication) {
+        let titel = [
+            "Vollen Zugriff erlauben",
+            "Alle Fotos erlauben",
+            "Allow Full Access",
+            "Allow Access to All Photos"
+        ]
+        for name in titel {
+            tippe(app, name, 1)
+        }
+    }
+
+    private func tippeErlauben(_ alert: XCUIElement) -> Bool {
+        let titel = [
+            "Vollen Zugriff erlauben",
+            "Alle Fotos erlauben",
+            "Allow Full Access",
+            "Allow Access to All Photos"
+        ]
+        for name in titel where alert.buttons[name].exists {
+            alert.buttons[name].tap()
+            return true
+        }
+        return false
+    }
+
+    private func tippe(_ app: XCUIApplication, _ titel: String, _ sekunden: TimeInterval) {
+        let knopf = app.buttons[titel]
+        if knopf.waitForExistence(timeout: sekunden) {
+            knopf.tap()
+        }
     }
 }

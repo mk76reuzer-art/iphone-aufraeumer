@@ -45,8 +45,6 @@ if [ -n "$UDID" ] && [ "$UDID" != "$ZEILE" ]; then
     "$MEDIEN/gleich-b.jpg" \
     "$MEDIEN/grosses-video.mp4" >>"$LOG" 2>&1
   ADD=$?
-  xcrun simctl privacy "$UDID" grant photos com.mk76reuzer.aufraeumer >>"$LOG" 2>&1
-  xcrun simctl privacy "$UDID" grant photos-add com.mk76reuzer.aufraeumer >>"$LOG" 2>&1
   if [ "$ADD" -ne 0 ]; then
     echo "Hinweis: Medien nicht in den Simulator gelegt"
     sed 's/error:/Hinweis:/g' "$LOG" | tail -n 40
@@ -68,6 +66,29 @@ if [ -n "$UDID" ] && [ "$UDID" != "$ZEILE" ]; then
   if [ -n "${DEVELOPER_DIR:-}" ]; then
     UMGEBUNG+=("DEVELOPER_DIR=$DEVELOPER_DIR")
   fi
+  # Erst bauen und einspielen. Die Foto-Freigabe gilt erst, wenn die App schon installiert ist.
+  env -i "${UMGEBUNG[@]}" \
+    xcodebuild -project "${SRCROOT}/Aufraeumer.xcodeproj" -scheme Aufraeumer \
+      -derivedDataPath /tmp/aufraeumer-dd \
+      -destination "platform=iOS Simulator,id=${UDID}" \
+      -parallel-testing-enabled NO \
+      build-for-testing >>"$LOG" 2>&1
+  BAU=$?
+  if [ "$BAU" -ne 0 ]; then
+    echo "Hinweis: Test-Bau fehlgeschlagen"
+    sed 's/error:/Hinweis:/g' "$LOG" | tail -n 40
+    echo 1 > /tmp/aufraeumer-shots/status.txt
+    exit 1
+  fi
+  APP=$(find /tmp/aufraeumer-dd/Build/Products -name 'Aufraeumer.app' -type d | head -1)
+  if [ -z "$APP" ]; then
+    echo "Hinweis: App nach dem Test-Bau nicht gefunden"
+    echo 1 > /tmp/aufraeumer-shots/status.txt
+    exit 1
+  fi
+  xcrun simctl install "$UDID" "$APP" >>"$LOG" 2>&1
+  xcrun simctl privacy "$UDID" grant photos com.mk76reuzer.aufraeumer >>"$LOG" 2>&1
+  xcrun simctl privacy "$UDID" grant photos-add com.mk76reuzer.aufraeumer >>"$LOG" 2>&1
   env -i "${UMGEBUNG[@]}" \
     xcodebuild -project "${SRCROOT}/Aufraeumer.xcodeproj" -scheme Aufraeumer \
       -derivedDataPath /tmp/aufraeumer-dd \
@@ -76,7 +97,7 @@ if [ -n "$UDID" ] && [ "$UDID" != "$ZEILE" ]; then
       -parallel-testing-enabled NO \
       -maximum-concurrent-test-simulator-destinations 1 \
       -resultBundlePath /tmp/aufraeumer-xcresult/TestResults.xcresult \
-      test >>"$LOG" 2>&1
+      test-without-building >>"$LOG" 2>&1
   STATUS=$?
   set -e
 fi
@@ -89,6 +110,8 @@ echo "$STATUS" > /tmp/aufraeumer-shots/status.txt
 echo "Screenshot-Status: $STATUS"
 find /tmp/aufraeumer-shots -name "*.png" | wc -l
 if [ "$STATUS" -ne 0 ] && [ -f "$LOG" ]; then
-  sed 's/error:/Hinweis:/g' "$LOG" | tail -n 80
+  echo "Auszug aus dem Testlauf:"
+  grep -E "Test Case|nicht sichtbar|Knopf freimachen|Sichtbar:|Assertion Failure|Testing failed|TEST FAILED|Video-Bytes:" "$LOG" \
+    | sed 's/error:/Hinweis:/g' | tail -n 40
 fi
 exit "$STATUS"
