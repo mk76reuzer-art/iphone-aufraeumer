@@ -12,7 +12,8 @@ public struct SicherungsOptionen: Equatable, Sendable {
         self.screenshotsSichern = screenshotsSichern
     }
 
-    public func effektiverModus(kategorien: Set<Kategorie>, basis: Modus = Regeln.modus(fuer: kategorien)) -> Modus {
+    public func effektiverModus(kategorien: Set<Kategorie>, basis: Modus? = nil) -> Modus {
+        let basis = basis ?? Regeln.modus(fuer: kategorien)
         if basis == .nurLoeschen { return .nurLoeschen }
         let brauchtOrdner = kategorien.contains { kat in
             switch kat {
