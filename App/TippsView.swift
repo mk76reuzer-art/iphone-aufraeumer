@@ -42,8 +42,12 @@ struct TippsView: View {
                     )
                 }
                 .padding()
+                .padding(.bottom, 8)
             }
-            HauptButton(titel: "Zurück") { dismiss() }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                HauptButton(titel: "Zurück") { dismiss() }
+                    .background(Color(.systemBackground))
+            }
         }
         .navigationTitle("Tipps")
         .navigationBarTitleDisplayMode(.inline)

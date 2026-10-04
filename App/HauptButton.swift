@@ -10,7 +10,7 @@ struct HauptButton: View {
             Text(titel)
                 .font(.title2.bold())
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 18)
+                .padding(.vertical, 14)
         }
         .buttonStyle(.borderedProminent)
         .controlSize(.large)

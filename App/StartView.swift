@@ -118,9 +118,11 @@ struct UebersichtView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SchrittLeiste(aktuell: .pruefen, nutzenSatz: model.nutzenSatz(fuer: .pruefen))
+            SchrittLeiste(aktuell: .pruefen, nutzenSatz: model.fehlerIstZugriff
+                          ? "Ohne Fotos geht das Aufräumen nicht."
+                          : model.nutzenSatz(fuer: .pruefen))
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 12) {
                     speicherKarte
                     if let fehler = model.fehlerText {
                         HinweisKasten(text: fehler, warnung: true)
@@ -130,7 +132,7 @@ struct UebersichtView: View {
                         HinweisKasten(text: hinweis, warnung: false)
                     }
                     videoBlock
-                    if model.scan != nil {
+                    if model.scan != nil && !model.fehlerIstZugriff {
                         Text("Das kann weg").font(.title2.bold())
                         ForEach(model.zeilen()) { zeile in
                             kategorieZeile(zeile.kat, anzahl: zeile.anzahl, bytes: zeile.bytes)
@@ -139,7 +141,9 @@ struct UebersichtView: View {
                 }
                 .padding()
             }
-            hauptknopf
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                hauptknopf.background(Color(.systemBackground))
+            }
         }
         .bildschirm("bildschirm-uebersicht")
     }
@@ -147,10 +151,17 @@ struct UebersichtView: View {
     private var speicherKarte: some View {
         VStack(alignment: .leading, spacing: 6) {
             let summe = model.freimachbareBytes()
-            Text(summe > 0 ? "Etwa \(Formatierung.gigabytes(summe))" : "Nichts zum Freimachen")
-                .font(.system(size: 40, weight: .bold, design: .rounded))
-            Text(summe > 0 ? "kannst du freimachen." : "Tippe auf Tipps, dort stehen weitere Wege.")
-                .font(.title3)
+            if model.fehlerIstZugriff {
+                Text("Fotos sind gesperrt")
+                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                Text("Tippe unten auf Einstellungen öffnen und wähle Alle Fotos.")
+                    .font(.title3)
+            } else {
+                Text(summe > 0 ? "Etwa \(Formatierung.gigabytes(summe))" : "Nichts zum Freimachen")
+                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                Text(summe > 0 ? "kannst du freimachen." : "Tippe auf Tipps, dort stehen weitere Wege.")
+                    .font(.title3)
+            }
             if let s = model.speicher {
                 Text("\(Formatierung.gigabytes(s.freiBytes)) von \(Formatierung.gigabytes(s.gesamtBytes)) sind frei.")
                     .font(.body)
@@ -234,8 +245,11 @@ struct AuswahlView: View {
                     }
                 }
             }
-            HauptButton(titel: "Weiter", aktiv: !model.ausgewaehlt.isEmpty) {
-                model.weiterVonAuswahl()
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                HauptButton(titel: "Weiter", aktiv: !model.ausgewaehlt.isEmpty) {
+                    model.weiterVonAuswahl()
+                }
+                .background(Color(.systemBackground))
             }
         }
         .bildschirm("bildschirm-auswahl")
