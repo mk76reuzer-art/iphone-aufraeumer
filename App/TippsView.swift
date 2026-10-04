@@ -5,47 +5,62 @@ struct TippsView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Text("Mehr Speicher ohne diese App")
-                    .font(.title2.bold())
-                tippBlock(
-                    titel: "iCloud-Fotos: Speicher optimieren",
-                    text: "Öffne Einstellungen, tippe auf deinen Namen, dann iCloud, dann Fotos. Wähle „iPhone-Speicher optimieren“. Dann liegen Originale in der Cloud und auf dem iPhone bleiben kleinere Kopien.",
-                    knopf: "Einstellungen öffnen",
-                    url: "App-prefs:root=CASTLE"
-                )
-                tippBlock(
-                    titel: "Ungenutzte Apps auslagern",
-                    text: "Öffne Einstellungen, dann Allgemein, dann iPhone-Speicher. Tippe auf eine App, die du selten nutzt, und wähle „App auslagern“. Deine Daten bleiben, die App wird entfernt.",
-                    knopf: "Speicher-Einstellungen",
-                    url: "App-prefs:root=General&path=STORAGE_MGMT"
-                )
-                tippBlock(
-                    titel: "Große Anhänge in Nachrichten",
-                    text: "Öffne Einstellungen, dann Allgemein, dann iPhone-Speicher. Unter „Empfehlungen“ findest du oft „Große Anhänge prüfen“ für Nachrichten.",
-                    knopf: "Speicher-Einstellungen",
-                    url: "App-prefs:root=General&path=STORAGE_MGMT"
-                )
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    Text("Mehr Speicher, den die App nicht selbst freimachen darf.")
+                        .font(.body)
+                    tipp(
+                        titel: "iCloud-Fotos: kleinere Kopien auf dem iPhone",
+                        schritte: [
+                            "Öffne die Einstellungen.",
+                            "Tippe oben auf deinen Namen.",
+                            "Tippe auf iCloud, dann auf Fotos.",
+                            "Wähle iPhone-Speicher optimieren."
+                        ],
+                        danach: "Die Originale bleiben in der Cloud. Auf dem iPhone liegen kleinere Kopien."
+                    )
+                    tipp(
+                        titel: "Apps, die du selten nutzt",
+                        schritte: [
+                            "Öffne die Einstellungen.",
+                            "Tippe auf Allgemein.",
+                            "Tippe auf iPhone-Speicher.",
+                            "Tippe auf eine App und dann auf App auslagern."
+                        ],
+                        danach: "Deine Daten bleiben. Die App selbst wird entfernt und kommt beim nächsten Öffnen wieder."
+                    )
+                    tipp(
+                        titel: "Große Anhänge in Nachrichten",
+                        schritte: [
+                            "Öffne die Einstellungen.",
+                            "Tippe auf Allgemein.",
+                            "Tippe auf iPhone-Speicher.",
+                            "Schau unter Empfehlungen nach Große Anhänge prüfen."
+                        ],
+                        danach: "Dort kannst du alte Filme und Fotos aus Nachrichten löschen."
+                    )
+                }
+                .padding()
             }
-            .padding()
+            HauptButton(titel: "Zurück") { dismiss() }
         }
         .navigationTitle("Tipps")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Zurück") { dismiss() }
-            }
-        }
+        .bildschirm("bildschirm-tipps")
     }
 
-    private func tippBlock(titel: String, text: String, knopf: String, url: String) -> some View {
+    private func tipp(titel: String, schritte: [String], danach: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(titel).font(.headline)
-            Text(text).font(.body)
-            Button(knopf) { EinstellungenOeffner.oeffnen(pfad: url) }
-                .buttonStyle(.bordered)
+            Text(titel).font(.title3.bold())
+            ForEach(Array(schritte.enumerated()), id: \.offset) { index, satz in
+                Text("\(index + 1). \(satz)").font(.body)
+            }
+            Text(danach)
+                .font(.body)
+                .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
         .background(Color.gray.opacity(0.08))
         .cornerRadius(12)
@@ -53,9 +68,9 @@ struct TippsView: View {
 }
 
 enum EinstellungenOeffner {
-    static func oeffnen(pfad: String) {
-        if let url = URL(string: pfad) {
-            UIApplication.shared.open(url)
-        }
+    /// Öffnet die Einstellungsseite dieser App. Dort liegt die Foto-Erlaubnis.
+    static func appEinstellungen() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
     }
 }

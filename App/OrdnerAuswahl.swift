@@ -2,9 +2,12 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-/// Ordnerwahl über die Dateien-App (zuverlässiger als fileImporter auf dem Gerät).
+/// Ordnerwahl der Dateien-App. Apple nennt das die Dokumentauswahl für einen Ordner.
+/// Darüber erreicht man iCloud Drive, Auf meinem iPhone, OneDrive und einen Stick.
+/// Ein reiner Export gibt nur eine einzelne Datei zurück, keinen Ordner zum Merken.
 struct OrdnerAuswahl: UIViewControllerRepresentable {
     @Binding var istAktiv: Bool
+    var startOrdner: URL?
     var onGewaehlt: (URL) -> Void
     var onAbbruch: () -> Void
 
@@ -12,7 +15,9 @@ struct OrdnerAuswahl: UIViewControllerRepresentable {
         let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.folder], asCopy: false)
         picker.delegate = context.coordinator
         picker.allowsMultipleSelection = false
-        picker.shouldShowFileExtensions = true
+        if let startOrdner {
+            picker.directoryURL = startOrdner
+        }
         return picker
     }
 
@@ -27,7 +32,6 @@ struct OrdnerAuswahl: UIViewControllerRepresentable {
         func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
             parent.istAktiv = false
             guard let url = urls.first else { return }
-            _ = url.startAccessingSecurityScopedResource()
             parent.onGewaehlt(url)
         }
 

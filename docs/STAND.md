@@ -9,3 +9,7 @@ Schritt 8 von 20: Auftrag V3 gelesen, `docs\PLAN-V3.md` mit Quellen zu Personal 
 Schritt 9 von 20: App 0.3.0 implementiert (vier Schritte, Ordnerauswahl, Video-Verkleinerung, Tipps, Tests, UI-Screenshots-CI).
 Schritt 10 von 20: CI grün (62 Tests, IPA Lauf 37237412181), `out\Aufraeumer.ipa` und `out\Aufraeumer.0.2.0.ipa` lokal.
 Schritt 11 von 20: `docs\ERGEBNIS.md`, `docs\APP-V3-FERTIG.md`, `docs\screenshots-v3\` (Workflow-Hinweis).
+Schritt 12 von 20: Grok prüft Version 0.3 am Code. Lücken: Ordnerzugriff endet vor der Prüfung, große Dateien im Arbeitsspeicher, Doppelte-Sicherung wirkt in der App nicht, Abbruch während des Laufs fehlt, Simulatorbilder sind nicht im Workflow.
+Schritt 13 von 20: Nacharbeit im Code, neue Tests, Workflow mit Simulator-Bildern. Prüfbericht docs\PRUEFUNG-GROK-V3.md.
+Schritt 14 von 20: Nacharbeit committen und auf den Zweig entwicklung schieben. Danach den GitHub-Lauf abwarten.
+Schritt 15 von 20: Der vorgeschriebene Push lehnt die Workflow-Datei ab, weil die Berechtigung workflow fehlt. Die Simulatorbilder laufen deshalb als Schritt im bestehenden IPA-Bau und kommen im Paket unter SimulatorBilder mit.

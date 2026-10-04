@@ -1,46 +1,70 @@
 import Foundation
 import AufraeumerKern
 
-/// Feste Daten für Simulator-Screenshots ohne echte Fotomediathek.
+/// Feste Daten für Simulator-Screenshots. Keine echten Fotos.
 enum DemoDaten {
+    static var screenshotPhase: String? {
+        guard let arg = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("-ScreenshotPhase=") }) else {
+            return nil
+        }
+        return String(arg.dropFirst("-ScreenshotPhase=".count))
+    }
+
     static var speicher: SpeicherStand {
         let gesamt: Int64 = 256_000_000_000
         let frei: Int64 = 8_500_000_000
         return SpeicherStand(freiBytes: frei, belegtBytes: gesamt - frei, gesamtBytes: gesamt,
-                             medienBelegtBytes: 42_000_000_000,
-                             groessteKategorie: ("Große Videos", 18_000_000_000))
+                             medienBelegtBytes: 5_080_000_000,
+                             groessteKategorie: ("Große Videos", 4_400_000_000))
     }
 
     static var scan: ScanErgebnis {
-        let k1 = Kandidat(id: "demo-1", name: "IMG_DEMO_A.MOV", groesseBytes: 1_200_000_000,
-                          aufnahme: Date(timeIntervalSince1970: 1_600_000_000), dauerSekunden: 180,
-                          istVideo: true, istScreenshot: false, istFavorit: false, istBearbeitet: false,
-                          inAlbum: false, istAusgeblendet: false, istLokalVorhanden: true)
-        let k2 = Kandidat(id: "demo-2", name: "IMG_DEMO_B.HEIC", groesseBytes: 4_200_000,
-                          aufnahme: Date(timeIntervalSince1970: 1_700_000_000), dauerSekunden: nil,
-                          istVideo: false, istScreenshot: true, istFavorit: false, istBearbeitet: false,
-                          inAlbum: false, istAusgeblendet: false, istLokalVorhanden: true)
-        let kat: [Kategorie: Set<String>] = [
-            .grosseVideos: [k1.id],
-            .alteScreenshots: [k2.id]
+        let video = kandidat("demo-video", "Urlaubsfilm.mov", 3_600_000_000, video: true, dauer: 600)
+        let videoKlein = kandidat("demo-video-klein", "Kurzfilm.mov", 800_000_000, video: true, dauer: 180)
+        let shot = kandidat("demo-shot", "Bildschirmfoto.jpg", 600_000_000, screenshot: true)
+        let alt = kandidat("demo-alt", "Altes Foto.jpg", 50_000_000, alt: true)
+        let dupA = kandidat("demo-dup-a", "Doppeltes Foto.jpg", 20_000_000)
+        let dupB = kandidat("demo-dup-b", "Doppeltes Foto Kopie.jpg", 20_000_000)
+        let s1 = kandidat("demo-serie-1", "Serie 1.jpg", 5_000_000)
+        let s2 = kandidat("demo-serie-2", "Serie 2.jpg", 5_000_000)
+        let s3 = kandidat("demo-serie-3", "Serie 3.jpg", 5_000_000)
+        let alle = [video, videoKlein, shot, alt, dupA, dupB, s1, s2, s3]
+        let kategorien: [Kategorie: Set<String>] = [
+            .grosseVideos: [video.id, videoKlein.id],
+            .alteScreenshots: [shot.id],
+            .langeUnberuehrt: [alt.id],
+            .duplikate: [dupB.id],
+            .serienbilder: [s2.id, s3.id]
         ]
-        var bytes: [Kategorie: Int64] = [.grosseVideos: k1.groesseBytes, .alteScreenshots: k2.groesseBytes]
-        return ScanErgebnis(kandidaten: [k1, k2], kategorien: kat,
-                            duplikatGruppen: [], serienGruppen: [], bytesJeKategorie: bytes)
+        var bytes: [Kategorie: Int64] = [:]
+        for (kat, ids) in kategorien {
+            bytes[kat] = ids.reduce(0) { summe, id in
+                summe + (alle.first { $0.id == id }?.groesseBytes ?? 0)
+            }
+        }
+        return ScanErgebnis(
+            kandidaten: alle,
+            kategorien: kategorien,
+            duplikatGruppen: [DuplikatGruppe(behalten: dupA.id, loeschbar: [dupB.id])],
+            serienGruppen: [DuplikatGruppe(behalten: s1.id, loeschbar: [s2.id, s3.id])],
+            bytesJeKategorie: bytes
+        )
     }
 
-    static func phaseAusArgument() -> AufraeumerModel.Phase? {
-        guard let arg = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("-ScreenshotPhase=") }) else {
-            return nil
-        }
-        let name = String(arg.dropFirst("-ScreenshotPhase=".count))
-        switch name {
-        case "uebersicht": return .uebersicht
-        case "auswahl": return .auswahl
-        case "sichern": return .sichern
-        case "bestaetigen": return .bestaetigen
-        case "bericht": return .bericht
-        default: return nil
-        }
+    static let ausgewaehlt: Set<String> = ["demo-video", "demo-shot"]
+
+    private static func kandidat(
+        _ id: String, _ name: String, _ bytes: Int64,
+        video: Bool = false, screenshot: Bool = false, alt: Bool = false, dauer: Double? = nil
+    ) -> Kandidat {
+        let aufnahme = alt
+            ? Date(timeIntervalSince1970: 1_500_000_000)
+            : Date(timeIntervalSince1970: 1_700_000_000)
+        return Kandidat(
+            id: id, name: name, groesseBytes: bytes, aufnahme: aufnahme,
+            dauerSekunden: dauer, istVideo: video, istScreenshot: screenshot,
+            istFavorit: false, istBearbeitet: false, inAlbum: false,
+            istAusgeblendet: false, istLokalVorhanden: true
+        )
     }
 }

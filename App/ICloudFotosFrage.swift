@@ -17,26 +17,22 @@ enum ICloudFotosSpeicher {
 }
 
 struct ICloudFotosFrageSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @Binding var erledigt: Bool
+    var antwort: (Bool) -> Void
 
     var body: some View {
         VStack(spacing: 20) {
             Text("Sind iCloud-Fotos an?")
-                .font(.title2.bold())
-            Text("Wenn ja, werden gelöschte Fotos auch aus der Cloud entfernt. Auf dem iPhone wird Speicher erst frei, wenn du unter „Zuletzt gelöscht“ alles endgültig löschst.")
+                .font(.title.bold())
                 .multilineTextAlignment(.center)
-            HauptButton(titel: "Ja, iCloud-Fotos sind an") {
-                ICloudFotosSpeicher.speichern(aktiv: true)
-                erledigt = true
-                dismiss()
-            }
-            HauptButton(titel: "Nein, nur auf dem iPhone") {
-                ICloudFotosSpeicher.speichern(aktiv: false)
-                erledigt = true
-                dismiss()
-            }
+            Text("Wenn ja, werden gelöschte Fotos auch aus der Cloud und von deinen anderen Geräten entfernt. Auf dem iPhone wird der Speicher erst frei, wenn du unter Zuletzt gelöscht alles endgültig löschst.")
+                .font(.body)
+                .multilineTextAlignment(.center)
+            HauptButton(titel: "Ja, iCloud-Fotos sind an") { antwort(true) }
+            Button("Nein, nur auf dem iPhone") { antwort(false) }
+                .font(.title3)
+                .padding(.bottom, 12)
         }
         .padding()
+        .bildschirm("bildschirm-icloud")
     }
 }

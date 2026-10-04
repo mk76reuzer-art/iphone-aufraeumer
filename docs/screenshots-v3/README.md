@@ -1,7 +1,6 @@
 # Screenshots Version 0.3
 
-Die UI-Tests (`UITests/ScreenshotTests.swift`) erzeugen fünf Bilder im Simulator-Modus (`-ScreenshotModus`).
+Die Workflow-Datei kann mit dem vorhandenen Zugang nicht geändert werden.
+Der IPA-Bau startet den Simulator, fotografiert jeden Bildschirm und legt die PNG-Dateien in die IPA unter SimulatorBilder.
+Nach dem Lauf werden sie hierher kopiert und angesehen.
 
-Automatische Ablage im Repository erfordert den erweiterten GitHub-Workflow in `docs/ci-ios-v3-full.yml` (Push braucht `gh auth refresh -s workflow`).
-
-Nach Aktivierung des Workflows: Artefakt `screenshots-v3` aus Actions hierher kopieren.

@@ -218,4 +218,32 @@ final class LoeschlaufTests: XCTestCase {
         XCTAssertEqual(e.nichtGeloescht["A"], "Protokoll konnte nicht geschrieben werden")
         XCTAssertFalse(log.enthaeltPraefix("loeschen:"))
     }
+
+    func testFortschrittKommtVorDemLoeschen() async {
+        let box = Ereignisse()
+        let l = Loeschlauf(bibliothek: bib, sicherung: sich, wartezeit: 0.05, pollIntervall: 0.005,
+                           jetzt: { T.jetzt }, aufFortschritt: { m in
+            box.add("\(m.schritt.rawValue):\(m.index)")
+        })
+        let e = await l.ausfuehren(auswahl: [sichern("A")], gruppen: [], bestaetigt: true)
+        XCTAssertEqual(e.geloescht, ["A"])
+        let liste = box.liste
+        guard let kopieren = liste.firstIndex(of: "kopieren:1"),
+              let pruefen = liste.firstIndex(of: "pruefen:1"),
+              let warten = liste.firstIndex(of: "wartenAufCloud:1"),
+              let loeschen = liste.firstIndex(of: "loeschen:1") else {
+            XCTFail("Fortschritt unvollständig: \(liste)")
+            return
+        }
+        XCTAssertLessThan(kopieren, pruefen)
+        XCTAssertLessThan(pruefen, warten)
+        XCTAssertLessThan(warten, loeschen)
+    }
+
+    func testKopieFehlerWirdVerstaendlichBeschrieben() {
+        XCTAssertEqual(
+            Loeschlauf.beschreibe(DateiKopieFehler.zuWenigPlatz),
+            "Zu wenig freier Speicher für die Kopie. Leere zuerst Zuletzt gelöscht in der Fotos-App und versuche es erneut."
+        )
+    }
 }

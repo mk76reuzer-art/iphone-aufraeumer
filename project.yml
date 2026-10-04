@@ -1,6 +1,7 @@
 name: Aufraeumer
 options:
   bundleIdPrefix: com.mk76reuzer
+  developmentLanguage: de
   deploymentTarget:
     iOS: "17.0"
 packages:
@@ -39,7 +40,15 @@ targets:
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1"
         MARKETING_VERSION: "0.3.0"
-        CURRENT_PROJECT_VERSION: "2"
+        CURRENT_PROJECT_VERSION: "3"
+    preBuildScripts:
+      - name: Simulatorbilder
+        basedOnDependencyAnalysis: false
+        script: /bin/bash "${SRCROOT}/scripts/simulator-bilder.sh"
+    postBuildScripts:
+      - name: Simulatorbilder ins Paket
+        basedOnDependencyAnalysis: false
+        script: /bin/bash "${SRCROOT}/scripts/simulator-bilder-ins-paket.sh"
   AufraeumerUITests:
     type: bundle.ui-testing
     platform: iOS

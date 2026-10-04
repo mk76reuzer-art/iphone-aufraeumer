@@ -19,7 +19,7 @@ struct SchrittLeiste: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 4) {
+            HStack(spacing: 6) {
                 ForEach(AufraeumSchritt.allCases, id: \.rawValue) { schritt in
                     schrittKapsel(schritt)
                 }
@@ -31,16 +31,19 @@ struct SchrittLeiste: View {
         }
         .padding(.horizontal)
         .padding(.top, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func schrittKapsel(_ schritt: AufraeumSchritt) -> some View {
         let aktiv = schritt.rawValue <= aktuell.rawValue
         let fett = schritt == aktuell
         return Text(schritt.titel)
-            .font(fett ? .subheadline.bold() : .subheadline)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 4)
-            .background(aktiv ? Color.accentColor.opacity(fett ? 0.25 : 0.12) : Color.gray.opacity(0.1))
+            .font(.caption.weight(fett ? .bold : .regular))
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(aktiv ? Color.accentColor.opacity(fett ? 0.28 : 0.14) : Color.gray.opacity(0.12))
             .cornerRadius(8)
             .accessibilityIdentifier("schritt-\(schritt.titel)")
     }

@@ -12,7 +12,11 @@ struct FotoVorschau: View {
                     .resizable()
                     .scaledToFill()
             } else {
-                Color.gray.opacity(0.2)
+                let film = assetId.contains("video")
+                Image(systemName: film ? "film" : "photo")
+                    .font(.title3)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(film ? Color.blue.opacity(0.25) : Color.orange.opacity(0.25))
             }
         }
         .clipped()

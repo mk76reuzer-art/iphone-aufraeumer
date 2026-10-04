@@ -1,6 +1,5 @@
 import Foundation
 import Photos
-import CryptoKit
 import AufraeumerKern
 
 /// PhotoKit-Umsetzung von `MedienBibliothek`.
@@ -40,13 +39,21 @@ final class PhotoKitBibliothek: MedienBibliothek, @unchecked Sendable {
 
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
             PHAssetResourceManager.default().writeData(for: res, toFile: temp, options: nil) { fehler in
-                if let fehler { cont.resume(throwing: fehler) } else { cont.resume() }
+                if let fehler {
+                    let ns = fehler as NSError
+                    if ns.domain == NSCocoaErrorDomain && ns.code == NSFileWriteOutOfSpaceError {
+                        cont.resume(throwing: DateiKopieFehler.zuWenigPlatz)
+                    } else {
+                        cont.resume(throwing: fehler)
+                    }
+                } else {
+                    cont.resume()
+                }
             }
         }
 
-        let daten = try Data(contentsOf: temp)
-        let summe = SHA256.hash(data: daten).map { String(format: "%02x", $0) }.joined()
-        return Export(datei: temp, bytes: Int64(daten.count), pruefsumme: summe)
+        let gemessen = try DateiPruefung.messen(url: temp)
+        return Export(datei: temp, bytes: gemessen.bytes, pruefsumme: gemessen.pruefsumme)
     }
 
     func loeschen(ids: [String]) async throws {

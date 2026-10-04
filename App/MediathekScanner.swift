@@ -8,6 +8,7 @@ struct ScanErgebnis: Sendable {
     var duplikatGruppen: [DuplikatGruppe]
     var serienGruppen: [DuplikatGruppe]
     var bytesJeKategorie: [Kategorie: Int64]
+    var hinweis: String? = nil
 }
 
 enum MediathekScanner {
@@ -35,8 +36,14 @@ enum MediathekScanner {
         var liste: [Kandidat] = []
         var serienEintraege: [(Kandidat, String)] = []
         var index = 0
+        var abgebrochen = false
 
-        alle.enumerateObjects { asset, _, _ in
+        alle.enumerateObjects { asset, _, stop in
+            if Task.isCancelled {
+                abgebrochen = true
+                stop.pointee = true
+                return
+            }
             index += 1
             if index % 40 == 0 {
                 fortschritt(0.05 + 0.55 * Double(index) / Double(gesamt), "Fotos werden gelesen …")
@@ -63,6 +70,7 @@ enum MediathekScanner {
                 serienEintraege.append((k, sk))
             }
         }
+        if abgebrochen { throw CancellationError() }
 
         fortschritt(0.65, "Aufräum-Vorschläge werden berechnet …")
         var katMap: [Kategorie: Set<String>] = [:]
@@ -76,7 +84,8 @@ enum MediathekScanner {
         }
 
         fortschritt(0.75, "Doppelte werden gesucht …")
-        let duplikate = try await duplikatGruppen(aus: liste, bibliothek: bibliothek)
+        let duplikatStand = try await duplikatGruppen(aus: liste, bibliothek: bibliothek)
+        let duplikate = duplikatStand.gruppen
         for g in duplikate {
             katMap[.duplikate, default: []].formUnion(g.loeschbar)
             for id in g.loeschbar {
@@ -98,25 +107,47 @@ enum MediathekScanner {
         }
 
         fortschritt(1, "Fertig.")
+        let hinweis = duplikatStand.uebersprungen > 0
+            ? "Einige mögliche Doppelte konnten nicht verglichen werden, weil zu wenig Speicher frei ist. Angezeigt wird nur, was sicher geprüft wurde."
+            : nil
         return ScanErgebnis(kandidaten: liste, kategorien: katMap, duplikatGruppen: duplikate,
-                            serienGruppen: serien, bytesJeKategorie: bytes)
+                            serienGruppen: serien, bytesJeKategorie: bytes, hinweis: hinweis)
+    }
+
+    private struct DuplikatStand {
+        var gruppen: [DuplikatGruppe]
+        var uebersprungen: Int
     }
 
     private static func duplikatGruppen(
         aus liste: [Kandidat],
         bibliothek: PhotoKitBibliothek
-    ) async throws -> [DuplikatGruppe] {
+    ) async throws -> DuplikatStand {
         let tauglich = liste.filter { $0.istLokalVorhanden && $0.groesseBytes > 0 }
         let nachGroesse = Dictionary(grouping: tauglich, by: \.groesseBytes)
         var ergebnis: [DuplikatGruppe] = []
+        var uebersprungen = 0
 
         for (_, gleichGross) in nachGroesse where gleichGross.count >= 2 {
+            if Task.isCancelled { throw CancellationError() }
             var nachSumme: [String: [Kandidat]] = [:]
+            var gruppeUnvollstaendig = false
             for k in gleichGross {
-                let export = try await bibliothek.exportieren(id: k.id)
-                defer { try? FileManager.default.removeItem(at: export.datei) }
-                nachSumme[export.pruefsumme, default: []].append(k)
+                if Task.isCancelled { throw CancellationError() }
+                let frei = SpeicherAnzeige.lesen()?.freiBytes ?? 0
+                if frei < k.groesseBytes + 150_000_000 {
+                    gruppeUnvollstaendig = true
+                    continue
+                }
+                do {
+                    let export = try await bibliothek.exportieren(id: k.id)
+                    defer { try? FileManager.default.removeItem(at: export.datei) }
+                    nachSumme[export.pruefsumme, default: []].append(k)
+                } catch {
+                    gruppeUnvollstaendig = true
+                }
             }
+            if gruppeUnvollstaendig { uebersprungen += gleichGross.count }
             for (_, gleich) in nachSumme where gleich.count >= 2 {
                 let sortiert = gleich.sorted { a, b in
                     if a.istFavorit != b.istFavorit { return a.istFavorit }
@@ -128,11 +159,12 @@ enum MediathekScanner {
                     loeschbar: sortiert.dropFirst().map(\.id).sorted()))
             }
         }
-        return ergebnis.sorted { $0.behalten < $1.behalten }
+        return DuplikatStand(gruppen: ergebnis.sorted { $0.behalten < $1.behalten },
+                             uebersprungen: uebersprungen)
     }
 }
 
-enum ScanFehler: LocalizedError {
+enum ScanFehler: LocalizedError, Equatable {
     case keinZugriff
 
     var errorDescription: String? {
@@ -144,8 +176,11 @@ enum ScanFehler: LocalizedError {
 
     static func hilfeText(fuer error: Error) -> String {
         if let s = error as? ScanFehler, s == .keinZugriff {
-            return "Kein Zugriff auf Fotos. Öffne die Einstellungen, tippe auf Datenschutz und Fotos, und erlaube dem Aufräumer vollen Zugriff."
+            return "Kein Zugriff auf Fotos. Tippe auf Einstellungen öffnen, dann auf Fotos, und wähle Alle Fotos. Komm danach zurück, die Prüfung startet von selbst."
         }
-        return error.localizedDescription
+        if error is CancellationError {
+            return "Abgebrochen. Es wurde nichts verändert."
+        }
+        return "Das Prüfen ist fehlgeschlagen. Tippe auf Erneut versuchen."
     }
 }

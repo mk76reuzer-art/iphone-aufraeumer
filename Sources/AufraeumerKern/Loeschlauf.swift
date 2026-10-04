@@ -38,17 +38,20 @@ public final class Loeschlauf: Sendable {
     private let wartezeit: TimeInterval
     private let pollIntervall: TimeInterval
     private let jetzt: @Sendable () -> Date
+    private let aufFortschritt: (@Sendable (LaufMeldung) -> Void)?
     private let aufEintrag: (@Sendable (ProtokollEintrag) async throws -> Void)?
 
     public init(bibliothek: any MedienBibliothek, sicherung: any Sicherung,
                 wartezeit: TimeInterval = 600, pollIntervall: TimeInterval = 2,
                 jetzt: @escaping @Sendable () -> Date = { Date() },
+                aufFortschritt: (@Sendable (LaufMeldung) -> Void)? = nil,
                 aufEintrag: (@Sendable (ProtokollEintrag) async throws -> Void)? = nil) {
         self.bibliothek = bibliothek
         self.sicherung = sicherung
         self.wartezeit = wartezeit
         self.pollIntervall = pollIntervall
         self.jetzt = jetzt
+        self.aufFortschritt = aufFortschritt
         self.aufEintrag = aufEintrag
     }
 
@@ -102,9 +105,13 @@ public final class Loeschlauf: Sendable {
 
         // Stufe 1: je Datei sichern und prüfen (nur im Modus erstSichern), dann freigeben.
         var abl: [String: DateiAblauf] = [:]
-        for a in einzeln {
+        for (offset, a) in einzeln.enumerated() {
             let k = a.kandidat
             var ablauf = DateiAblauf(kandidat: k, modus: a.modus)
+            let melde = { (schritt: LaufMeldung.Schritt) in
+                self.aufFortschritt?(LaufMeldung(index: offset + 1, gesamt: einzeln.count,
+                                                 name: k.name, schritt: schritt))
+            }
             do {
                 if Task.isCancelled { throw CancellationError() }
                 guard k.istLokalVorhanden, k.groesseBytes > 0 else {
@@ -112,14 +119,17 @@ public final class Loeschlauf: Sendable {
                 }
                 try ablauf.auswaehlen()
                 if a.modus == .erstSichern {
+                    melde(.kopieren)
                     let export = try await bibliothek.exportieren(id: k.id)
                     defer { try? FileManager.default.removeItem(at: export.datei) }
                     guard export.bytes > 0 else { throw LoeschlaufFehler.exportLeer }
                     guard export.bytes == k.groesseBytes else { throw LoeschlaufFehler.exportGroesseAbweichend }
                     let beleg = try await sicherung.ablegen(export, name: k.name)
+                    melde(.pruefen)
                     let kopie = try await sicherung.kopieLesen(beleg)
                     try ablauf.kopiert(bytes: kopie.bytes, pruefsumme: kopie.pruefsumme)
                     try ablauf.pruefen(originalBytes: export.bytes, originalPruefsumme: export.pruefsumme)
+                    melde(.wartenAufCloud)
                     try await warteAufUpload(beleg)
                     try ablauf.hochgeladen()
                     await notiere(k, .gesichert)
@@ -162,6 +172,10 @@ public final class Loeschlauf: Sendable {
         }
 
         // Stufe 3: erst „beabsichtigt“ festhalten, dann löschen, dann Ergebnis festhalten.
+        for (offset, id) in zuLoeschen.enumerated() {
+            let name = abl[id]?.kandidat.name ?? ""
+            aufFortschritt?(LaufMeldung(index: offset + 1, gesamt: zuLoeschen.count, name: name, schritt: .loeschen))
+        }
         do {
             for id in zuLoeschen { if let a = abl[id] { try await notiereStreng(a.kandidat, .beabsichtigt) } }
         } catch {
@@ -200,6 +214,9 @@ public final class Loeschlauf: Sendable {
 
     static func beschreibe(_ fehler: Error) -> String {
         if fehler is CancellationError { return "Vorgang abgebrochen" }
+        if let kopie = fehler as? DateiKopieFehler {
+            return kopie.errorDescription ?? "Kopieren fehlgeschlagen"
+        }
         if let a = fehler as? AblaufFehler {
             switch a {
             case .groesseUngleich: return "Größe der Kopie stimmt nicht"
