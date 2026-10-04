@@ -7,3 +7,5 @@ Schritt 6 von 12: `out\Aufraeumer.probe.ipa` gesichert, neue `out\Aufraeumer.ipa
 Schritt 7 von 12: `docs\ERGEBNIS.md` und `docs\VERBESSERTE-APP-FERTIG.md` erstellt.
 Schritt 8 von 20: Auftrag V3 gelesen, `docs\PLAN-V3.md` mit Quellen zu Personal Team und iCloud-Fotos erstellt.
 Schritt 9 von 20: App 0.3.0 implementiert (vier Schritte, Ordnerauswahl, Video-Verkleinerung, Tipps, Tests, UI-Screenshots-CI).
+Schritt 10 von 20: CI grün (62 Tests, IPA Lauf 37237412181), `out\Aufraeumer.ipa` und `out\Aufraeumer.0.2.0.ipa` lokal.
+Schritt 11 von 20: `docs\ERGEBNIS.md`, `docs\APP-V3-FERTIG.md`, `docs\screenshots-v3\` (Workflow-Hinweis).
