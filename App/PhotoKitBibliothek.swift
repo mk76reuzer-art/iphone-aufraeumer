@@ -101,6 +101,12 @@ enum PhotoKitHilfen {
         return n.int64Value
     }
 
+    static func istRaw(asset: PHAsset, name: String) -> Bool {
+        if Regeln.istRawName(name) { return true }
+        let uti = asset.uniformTypeIdentifier?.lowercased() ?? ""
+        return uti.contains("raw") || uti.contains("dng")
+    }
+
     static func inBenutzerAlbum(asset: PHAsset) -> Bool {
         let opts = PHFetchOptions()
         opts.predicate = NSPredicate(format: "estimatedAssetCount > 0")

@@ -80,7 +80,7 @@ enum MediathekScanner {
                 istAusgeblendet: asset.isHidden,
                 istLokalVorhanden: giltAlsLokal && meta.groesse > 0 && !nurInCloud,
                 istLiveFoto: asset.mediaSubtypes.contains(.photoLive),
-                istRaw: asset.mediaSubtypes.contains(.photoRAW),
+                istRaw: PhotoKitHilfen.istRaw(asset: asset, name: meta.name),
                 istBildschirmaufnahme: asset.mediaType == .video && (
                     asset.mediaSubtypes.contains(.videoScreenRecording)
                     || Regeln.istBildschirmaufnahmeName(meta.name)
