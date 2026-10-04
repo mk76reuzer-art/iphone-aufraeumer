@@ -1,6 +1,6 @@
 import Foundation
 
-struct SpeicherStand: Equatable, Sendable {
+struct SpeicherStand: Sendable {
     var freiBytes: Int64
     var belegtBytes: Int64
     var gesamtBytes: Int64

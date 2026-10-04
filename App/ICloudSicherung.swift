@@ -51,13 +51,10 @@ final class ICloudSicherung: Sicherung, @unchecked Sendable {
         let url = try url(fuer: beleg)
         let w = try url.resourceValues(forKeys: [
             .ubiquitousItemIsUploadedKey,
-            .ubiquitousItemIsUploadingKey,
-            .ubiquitousItemPercentUploadedKey
+            .ubiquitousItemIsUploadingKey
         ])
-        if let p = w.ubiquitousItemPercentUploaded, p > 0 {
-            uploadFortschritt?(Double(p) / 100)
-        } else if w.ubiquitousItemIsUploading == true {
-            uploadFortschritt?(0.05)
+        if w.ubiquitousItemIsUploading == true {
+            uploadFortschritt?(0.5)
         }
         return w.ubiquitousItemIsUploaded == true
     }

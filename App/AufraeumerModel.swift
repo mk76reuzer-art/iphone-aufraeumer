@@ -77,7 +77,7 @@ final class AufraeumerModel: ObservableObject {
             }
         }
         for k in ergebnis.kandidaten {
-            let kat = Regeln.kategorien(fuer: k)
+            let kat = Regeln.kategorien(fuer: k, jetzt: Date())
             guard !kat.isEmpty, !k.istFavorit, !k.istAusgeblendet else { continue }
             if kat.contains(.alteScreenshots) { ids.insert(k.id) }
         }
@@ -90,7 +90,7 @@ final class AufraeumerModel: ObservableObject {
 
     func modus(fuer id: String) -> Modus {
         guard let k = kandidat(id) else { return .erstSichern }
-        let kat = Regeln.kategorien(fuer: k)
+        let kat = Regeln.kategorien(fuer: k, jetzt: Date())
         return Regeln.modus(fuer: kat)
     }
 
