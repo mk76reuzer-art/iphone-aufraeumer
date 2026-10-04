@@ -1,11 +1,21 @@
 import Foundation
 
 public enum Kategorie: String, Codable, CaseIterable, Sendable {
-    case grosseVideos, langeUnberuehrt, duplikate, alteScreenshots
+    case grosseVideos, langeUnberuehrt, duplikate, serienbilder, alteScreenshots
 
     /// Kategorien, deren Dateien vor dem Löschen zuerst gesichert werden müssen.
     public var sichernNoetig: Bool {
         self == .grosseVideos || self == .langeUnberuehrt
+    }
+
+    public var anzeigeName: String {
+        switch self {
+        case .grosseVideos: return "Große Videos"
+        case .langeUnberuehrt: return "Alte Aufnahmen"
+        case .duplikate: return "Doppelte Fotos"
+        case .serienbilder: return "Ähnliche Serienbilder"
+        case .alteScreenshots: return "Bildschirmfotos"
+        }
     }
 }
 

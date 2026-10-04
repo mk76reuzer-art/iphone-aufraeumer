@@ -55,6 +55,7 @@ final class RegelnTests: XCTestCase {
         XCTAssertTrue(Kategorie.grosseVideos.sichernNoetig)
         XCTAssertTrue(Kategorie.langeUnberuehrt.sichernNoetig)
         XCTAssertFalse(Kategorie.duplikate.sichernNoetig)
+        XCTAssertFalse(Kategorie.serienbilder.sichernNoetig)
         XCTAssertFalse(Kategorie.alteScreenshots.sichernNoetig)
     }
 }
