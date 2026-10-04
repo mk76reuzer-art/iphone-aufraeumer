@@ -103,8 +103,14 @@ enum PhotoKitHilfen {
 
     static func istRaw(asset: PHAsset, name: String) -> Bool {
         if Regeln.istRawName(name) { return true }
-        let uti = asset.uniformTypeIdentifier?.lowercased() ?? ""
-        return uti.contains("raw") || uti.contains("dng")
+        // PHAsset hat keinen Typ-Bezeichner. Der steht an der Foto-Ressource.
+        let ressourcen = PHAssetResource.assetResources(for: asset)
+        for res in ressourcen {
+            if Regeln.istRawName(res.originalFilename) { return true }
+            let uti = res.uniformTypeIdentifier.lowercased()
+            if uti.contains("raw") || uti.contains("dng") { return true }
+        }
+        return false
     }
 
     static func inBenutzerAlbum(asset: PHAsset) -> Bool {
