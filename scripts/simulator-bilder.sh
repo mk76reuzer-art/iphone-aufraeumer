@@ -20,12 +20,29 @@ STATUS=1
 LOG=/tmp/aufraeumer-shots/xcodebuild.log
 if [ -n "$GERAET" ]; then
   set +e
-  xcodebuild -project "${SRCROOT}/Aufraeumer.xcodeproj" -scheme Aufraeumer \
-    -derivedDataPath /tmp/aufraeumer-dd \
-    -destination "platform=iOS Simulator,name=${GERAET}" \
-    -only-testing:AufraeumerUITests/ScreenshotTests/testAlleBildschirme \
-    -resultBundlePath /tmp/aufraeumer-xcresult/TestResults.xcresult \
-    test >"$LOG" 2>&1
+  # Saubere Umgebung. Sonst erbt der Simulator-Test das iPhoneOS-SDK des Archivs
+  # und verknuepft das falsche XCTest.
+  UMGEBUNG=(
+    "PATH=$PATH"
+    "HOME=$HOME"
+    "USER=${USER:-runner}"
+    "LOGNAME=${LOGNAME:-${USER:-runner}}"
+    "SHELL=/bin/bash"
+    "TMPDIR=${TMPDIR:-/tmp}"
+    "LANG=${LANG:-en_US.UTF-8}"
+    "GITHUB_ACTIONS=1"
+    "AUFTRAEUMER_IN_SHOTS=1"
+  )
+  if [ -n "${DEVELOPER_DIR:-}" ]; then
+    UMGEBUNG+=("DEVELOPER_DIR=$DEVELOPER_DIR")
+  fi
+  env -i "${UMGEBUNG[@]}" \
+    xcodebuild -project "${SRCROOT}/Aufraeumer.xcodeproj" -scheme Aufraeumer \
+      -derivedDataPath /tmp/aufraeumer-dd \
+      -destination "platform=iOS Simulator,name=${GERAET}" \
+      -only-testing:AufraeumerUITests/ScreenshotTests/testAlleBildschirme \
+      -resultBundlePath /tmp/aufraeumer-xcresult/TestResults.xcresult \
+      test >"$LOG" 2>&1
   STATUS=$?
   set -e
 fi

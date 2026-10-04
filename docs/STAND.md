@@ -14,3 +14,4 @@ Schritt 13 von 20: Nacharbeit im Code, neue Tests, Workflow mit Simulator-Bilder
 Schritt 14 von 20: Nacharbeit committen und auf den Zweig entwicklung schieben. Danach den GitHub-Lauf abwarten.
 Schritt 15 von 20: Der vorgeschriebene Push lehnt die Workflow-Datei ab, weil die Berechtigung workflow fehlt. Die Simulatorbilder laufen deshalb als Schritt im bestehenden IPA-Bau und kommen im Paket unter SimulatorBilder mit.
 Schritt 16 von 20: Lauf 37239837266, Kerntests grün, Archiv rot. Ursache: die Test-App hatte keine Info.plist, und die Zeile error im Skript hat den Archivbau abgebrochen. GENERATE_INFOPLIST_FILE für die Test-App, Testprotokoll ohne das Wort error.
+Schritt 17 von 20: Lauf 37240250369 weiter rot. Der Simulator-Test erbte das iPhone-SDK des Archivs und verknüpfte das falsche XCTest. Der Test startet jetzt in einer sauberen Umgebung.
