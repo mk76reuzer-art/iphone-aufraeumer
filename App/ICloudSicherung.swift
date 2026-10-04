@@ -76,7 +76,7 @@ enum ICloudOrdnerSpeicher {
     private static let key = "aufraeumer.icloud.ordner"
 
     static func speichern(_ url: URL) throws {
-        let daten = try url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil,
+        let daten = try url.bookmarkData(options: .minimalBookmark, includingResourceValuesForKeys: nil,
                                          relativeTo: nil)
         UserDefaults.standard.set(daten, forKey: key)
     }
@@ -84,7 +84,7 @@ enum ICloudOrdnerSpeicher {
     static func laden() -> URL? {
         guard let daten = UserDefaults.standard.data(forKey: key) else { return nil }
         var veraltet = false
-        return try? URL(resolvingBookmarkData: daten, options: .withSecurityScope, relativeTo: nil,
+        return try? URL(resolvingBookmarkData: daten, options: [], relativeTo: nil,
                         bookmarkDataIsStale: &veraltet)
     }
 }

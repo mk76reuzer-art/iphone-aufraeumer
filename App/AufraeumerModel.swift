@@ -227,15 +227,9 @@ final class AufraeumerModel: ObservableObject {
             Task { @MainActor in self?.uploadProzent = p }
         }
 
-        var erledigt = 0
         let lauf = Loeschlauf(bibliothek: bibliothek, sicherung: sicherungLauf) { [weak self] eintrag in
-            Task { @MainActor in
-                guard let self else { return }
-                erledigt += 1
-                self.laufDateiIndex = min(erledigt, self.laufDateiGesamt)
-                self.laufFortschritt = self.laufDateiGesamt > 0
-                    ? Double(erledigt) / Double(self.laufDateiGesamt) : 1
-                self.laufText = eintrag.name
+            await MainActor.run {
+                self?.laufEintragAktualisieren(eintrag)
             }
         }
 

@@ -16,6 +16,12 @@ public struct LoeschlaufErgebnis: Sendable {
     /// Kennung → Grund, warum nicht gelöscht wurde.
     public let nichtGeloescht: [String: String]
     public let protokoll: Protokoll
+
+    public init(geloescht: [String], nichtGeloescht: [String: String], protokoll: Protokoll) {
+        self.geloescht = geloescht
+        self.nichtGeloescht = nichtGeloescht
+        self.protokoll = protokoll
+    }
 }
 
 public enum LoeschlaufFehler: Error, Equatable {

@@ -1,0 +1,74 @@
+# Vollständige Workflow-Datei für manuelles Ersetzen von .github/workflows/ios.yml
+# (benötigt gh auth refresh -s workflow)
+
+name: ios
+on:
+  push:
+    branches: [entwicklung, main]
+  workflow_dispatch:
+
+jobs:
+  kern-tests:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Versionen
+        run: xcodebuild -version && swift --version
+      - name: Tests
+        run: swift test
+
+  ui-screenshots:
+    needs: kern-tests
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: XcodeGen installieren
+        run: brew install xcodegen
+      - name: Projekt erzeugen
+        run: xcodegen generate
+      - name: Simulator-Screenshots
+        run: |
+          DEVICE=$(xcrun simctl list devices available | grep -m1 "iPhone 16" | sed 's/^[[:space:]]*//' | sed 's/ (.*//')
+          if [ -z "$DEVICE" ]; then DEVICE="iPhone 16"; fi
+          xcodebuild -project Aufraeumer.xcodeproj -scheme Aufraeumer \
+            -destination "platform=iOS Simulator,name=${DEVICE}" \
+            -only-testing:AufraeumerUITests/ScreenshotTests/testAlleBildschirme \
+            test 2>&1 | tee xcode-test.log
+          mkdir -p docs/screenshots-v3
+          find ~/Library/Developer/Xcode/DerivedData -name "*.png" -path "*Attachments*" -newer xcode-test.log 2>/dev/null | head -20 | while read f; do
+            cp "$f" "docs/screenshots-v3/$(basename "$f")" || true
+          done
+          ls -la docs/screenshots-v3 || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-v3
+          path: docs/screenshots-v3
+          retention-days: 30
+
+  ipa:
+    needs: [kern-tests, ui-screenshots]
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: XcodeGen installieren
+        run: brew install xcodegen
+      - name: Projekt erzeugen
+        run: xcodegen generate
+      - name: Bauen (ohne Signatur)
+        run: |
+          xcodebuild -project Aufraeumer.xcodeproj -scheme Aufraeumer \
+            -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -archivePath build/Aufraeumer.xcarchive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            archive
+      - name: IPA packen
+        run: |
+          mkdir -p Payload
+          cp -R build/Aufraeumer.xcarchive/Products/Applications/Aufraeumer.app Payload/
+          zip -qr Aufraeumer.ipa Payload
+          ls -l Aufraeumer.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Aufraeumer-ipa
+          path: Aufraeumer.ipa
+          retention-days: 14

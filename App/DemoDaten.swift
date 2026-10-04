@@ -25,8 +25,8 @@ enum DemoDaten {
             .alteScreenshots: [k2.id]
         ]
         var bytes: [Kategorie: Int64] = [.grosseVideos: k1.groesseBytes, .alteScreenshots: k2.groesseBytes]
-        return ScanErgebnis(kandidaten: [k1, k2], kategorien: kat, bytesJeKategorie: bytes,
-                            duplikatGruppen: [], serienGruppen: [])
+        return ScanErgebnis(kandidaten: [k1, k2], kategorien: kat,
+                            duplikatGruppen: [], serienGruppen: [], bytesJeKategorie: bytes)
     }
 
     static func phaseAusArgument() -> AufraeumerModel.Phase? {

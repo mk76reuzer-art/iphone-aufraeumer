@@ -1,0 +1,11 @@
+Der Auftrag ist erledigt. Die Probe-App ist durch Version 0.2.0 ersetzt.
+
+Beim Start siehst du groß den freien Speicher und die größte Aufräum-Gruppe. Fünf Vorschläge mit Größe in Gigabyte und Vorschaubildern: große Videos, doppelte Fotos, ähnliche Serienbilder, Bildschirmfotos, alte Aufnahmen. Nur sichere Treffer sind vorausgewählt. Du kannst in der Auswahl alles anpassen.
+
+Vor dem Löschen kopiert die App nach iCloud Drive in deinen gewählten Ordner, mit Fortschrittsanzeige. Gelöscht wird nur über die Fotos-Schnittstelle mit Apple-Bestätigung. Danach erinnert die App an „Zuletzt gelöscht“. Der Kern `AufraeumerKern` bleibt unverändert in der Logik; neu sind Serienfinder und Kategorie Serienbilder.
+
+Die Continuous Integration lief grün mit 57 Tests. Die neue Installationsdatei liegt unter `out\Aufraeumer.ipa` mit etwa 199 Kilobyte. Die alte Probe liegt als `out\Aufraeumer.probe.ipa`. Details stehen in `docs\ERGEBNIS.md`. Der Fortschritt ist in `docs\STAND.md`. Die leere Datei `docs\VERBESSERTE-APP-FERTIG.md` markiert den Abschluss.
+
+Installiere wie in `ANLEITUNG.md` mit Sideloadly. Wähle einmal einen iCloud-Drive-Ordner. Große Videos und alte Aufnahmen markierst du selbst, wenn du sie mitnehmen willst.
+
+Offen bleibt: Ausgeblendete Fotos können in iOS extra Freigabe brauchen. Der Upload-Fortschritt in Prozent ist während iCloud-Upload nur grob. Ein Test auf deinem iPhone steht noch aus.

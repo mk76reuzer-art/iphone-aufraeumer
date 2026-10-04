@@ -27,6 +27,7 @@ struct OrdnerAuswahl: UIViewControllerRepresentable {
         func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
             parent.istAktiv = false
             guard let url = urls.first else { return }
+            _ = url.startAccessingSecurityScopedResource()
             parent.onGewaehlt(url)
         }
 

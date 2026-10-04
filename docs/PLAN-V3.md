@@ -8,7 +8,7 @@ Mit einer kostenlosen Apple-ID signiert Xcode nur über das **Personal Team**. D
 
 Version 0.2.0 nutzt **keinen** App-eigenen iCloud-Container, sondern kopiert in einen vom Nutzer in der **Dateien-App** gewählten Ordner (`ICloudSicherung` + Lesezeichen in `UserDefaults`). Das ist grundsätzlich ohne Entwicklerkonto möglich.
 
-Das Problem war die **Ordnerauswahl**: `fileImporter` mit `.folder` ist auf dem iPhone oft unzuverlässig (kein klarer Pfad zu iCloud Drive, On My iPhone, Drittanbieter). Zusätzlich fehlte beim Lesezeichen oft `.withSecurityScope`, sodass Schreibzugriff nach Neustart scheitern kann. Die Upload-Warteschleife (`ubiquitousItemIsUploaded`) blockiert bei Ordnern **auf dem Gerät** unnötig.
+Das Problem war die **Ordnerauswahl**: `fileImporter` mit `.folder` ist auf dem iPhone oft unzuverlässig (kein klarer Pfad zu iCloud Drive, On My iPhone, Drittanbieter). Zusätzlich muss nach der Ordnerwahl `startAccessingSecurityScopedResource` gesetzt werden (iOS kennt kein macOS-`withSecurityScope` beim Lesezeichen). Die Upload-Warteschleife (`ubiquitousItemIsUploaded`) blockiert bei Ordnern **auf dem Gerät** unnötig.
 
 **0.3:** Ordner über `UIDocumentPickerViewController` (Dateien-App), Lesezeichen mit Security-Scope, nach Größenprüf der Kopie gilt lokale Ablage als fertig; nur echte iCloud-Drive-Dateien warten weiter auf Upload.
 
